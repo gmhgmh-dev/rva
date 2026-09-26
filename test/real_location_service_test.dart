@@ -184,6 +184,46 @@ void main() {
       expect(point.streetName, contains('Sofijas iela'));
       expect(point.maxSpeedLimitKmh, equals(30));
       expect(point.isOneWay, isTrue);
+      expect(point.dataSource, equals('Pilsētas ceļš'));
+
+      // Outside old town fallback does not say Lielais prospekts
+      final pointGeneric = await service.resolveRoadMetadata(_createPosition(57.3800, 21.5400));
+      expect(pointGeneric.streetName, equals('Pilsētas ceļš'));
+      expect(pointGeneric.streetName, isNot(contains('Lielais prospekts')));
+    });
+
+    test('Resolves Sarkanmuižas dambis in Ventspils with Overpass API tiešsaiste dataSource', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              {
+                'type': 'way',
+                'tags': {
+                  'highway': 'secondary',
+                  'name': 'Sarkanmuižas dambis',
+                  'maxspeed': '50',
+                  'oneway': 'no',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      // User location on Sarkanmuižas dambis
+      final point = await service.resolveRoadMetadata(_createPosition(57.3995, 21.5712));
+
+      expect(point.streetName, equals('Sarkanmuižas dambis'));
+      expect(point.maxSpeedLimitKmh, equals(50));
+      expect(point.dataSource, equals('Overpass API tiešsaiste'));
     });
   });
 }

@@ -8,6 +8,7 @@ class RoadPoint {
   final bool isOneWay;
   final String streetName;
   final DateTime timestamp;
+  final String dataSource;
 
   const RoadPoint({
     required this.latitude,
@@ -17,6 +18,7 @@ class RoadPoint {
     required this.isOneWay,
     required this.streetName,
     required this.timestamp,
+    this.dataSource = 'Demo simulācija',
   });
 
   RoadPoint copyWith({
@@ -27,6 +29,7 @@ class RoadPoint {
     bool? isOneWay,
     String? streetName,
     DateTime? timestamp,
+    String? dataSource,
   }) {
     return RoadPoint(
       latitude: latitude ?? this.latitude,
@@ -36,11 +39,12 @@ class RoadPoint {
       isOneWay: isOneWay ?? this.isOneWay,
       streetName: streetName ?? this.streetName,
       timestamp: timestamp ?? this.timestamp,
+      dataSource: dataSource ?? this.dataSource,
     );
   }
 
   @override
   String toString() {
-    return 'RoadPoint($streetName, lat: $latitude, lon: $longitude, limit: $maxSpeedLimitKmh km/h, oneWay: $isOneWay)';
+    return 'RoadPoint($streetName, lat: $latitude, lon: $longitude, limit: $maxSpeedLimitKmh km/h, oneWay: $isOneWay, source: $dataSource)';
   }
 }

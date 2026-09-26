@@ -50,12 +50,14 @@ void main() {
     expect(find.text('50'), findsOneWidget);
     expect(find.text('STANDARTA ZONA'), findsOneWidget);
     expect(find.text('DIVVIRZIENU IELA'), findsOneWidget);
+    expect(find.textContaining('Datu avots: Gaidīšanas režīms'), findsOneWidget);
 
     // Step manually along the Ventspils route:
     // Index 0 is initial Lielais prospekts
     // Step to Index 1 (Lielais prospekts 2)
     manager.stepNextMockPoint();
     await tester.pump();
+    expect(find.textContaining('Demo simulācija'), findsOneWidget);
 
     // Step to Index 2 (Kuldīgas iela 1, 30 km/h) -> Trigger 1
     manager.stepNextMockPoint();
@@ -89,5 +91,9 @@ void main() {
 
     await manager.stop();
     await tester.pump();
+
+    // Verify that stop() clears currentPoint and restores idle status
+    expect(manager.currentPoint, isNull);
+    expect(find.textContaining('Datu avots: Gaidīšanas režīms'), findsOneWidget);
   });
 }

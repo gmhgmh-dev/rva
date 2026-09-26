@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/voice_alert_event.dart';
 import '../services/driving_assistant_manager.dart';
 import '../widgets/one_way_badge_widget.dart';
@@ -112,9 +113,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             // Road Dashboard (Speed Limit & One-Way indicators)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E222B),
                   borderRadius: BorderRadius.circular(20),
@@ -125,6 +126,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Column(
                   children: [
+                    // Data Source Banner (Debug / Status Indicator)
+                    _buildDataSourceIndicator(manager),
+
                     // Street & Coordinates
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                       ],
                     ),
-                    const Divider(color: Color(0xFF2C323F), height: 28),
+                    const Divider(color: Color(0xFF2C323F), height: 18),
 
                     // Signs & Indicators Row
                     Row(
@@ -235,6 +239,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDataSourceIndicator(DrivingAssistantManager manager) {
+    final currentPoint = manager.currentPoint;
+    final mode = manager.mode;
+
+    String label;
+    IconData icon;
+    Color color;
+
+    if (mode == DriveMode.realGps) {
+      final street = (currentPoint != null && currentPoint.streetName.isNotEmpty)
+          ? currentPoint.streetName
+          : 'Meklē atrašanās vietu...';
+      final source = currentPoint?.dataSource ??
+          (manager.isOfflineMapLoaded ? 'PMTiles bezsaistes karte' : 'Overpass API tiešsaiste');
+      label = 'Datu avots: Reālais GPS [$street] ($source)';
+      icon = Icons.satellite_alt_rounded;
+      color = Colors.greenAccent;
+    } else if (mode == DriveMode.mockSimulation) {
+      final street = (currentPoint != null && currentPoint.streetName.isNotEmpty)
+          ? currentPoint.streetName
+          : 'Lielais prospekts';
+      label = 'Datu avots: Demo simulācija [$street]';
+      icon = Icons.smart_toy_outlined;
+      color = Colors.orangeAccent;
+    } else {
+      label = 'Datu avots: Gaidīšanas režīms (GPS nav aktīvs)';
+      icon = Icons.location_off_outlined;
+      color = Colors.white54;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withAlpha(80), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -354,7 +418,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: manager.mode == DriveMode.realGps ? Colors.green.shade800 : const Color(0xFF233044),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                     side: BorderSide(
@@ -369,6 +433,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 onPressed: () async {
+                  final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+                  if (!serviceEnabled && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Ierīcē ir izslēgts GPS atrašanās vietas pakalpojums.'),
+                        backgroundColor: Colors.redAccent,
+                        action: SnackBarAction(
+                          label: 'Ieslēgt GPS',
+                          textColor: Colors.white,
+                          onPressed: () => Geolocator.openLocationSettings(),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  final permission = await Geolocator.checkPermission();
+                  if (permission == LocationPermission.deniedForever && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('GPS atļaujas ir bloķētas iestatījumos.'),
+                        backgroundColor: Colors.redAccent,
+                        action: SnackBarAction(
+                          label: 'Iestatījumi',
+                          textColor: Colors.white,
+                          onPressed: () => Geolocator.openAppSettings(),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
                   final success = await manager.startRealGps();
                   if (!success && mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -390,7 +486,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ? Colors.orange.shade800
                       : const Color(0xFF382F1D),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                     side: BorderSide(
@@ -451,21 +547,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildAlertHistoryList(DrivingAssistantManager manager) {
     if (manager.alertHistory.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.mic_none_rounded, color: Colors.white.withAlpha(40), size: 48),
-            const SizedBox(height: 8),
-            const Text(
-              'Pagaidām nav atskaņots neviens paziņojums.',
-              style: TextStyle(color: Colors.white38, fontSize: 13),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Palaidiet Ventspils testa braucienu, lai pārbaudītu trigerus.',
-              style: TextStyle(color: Colors.white24, fontSize: 12),
-            ),
-          ],
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.mic_none_rounded, color: Colors.white.withAlpha(40), size: 36),
+              const SizedBox(height: 6),
+              const Text(
+                'Pagaidām nav atskaņots neviens paziņojums.',
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Palaidiet Ventspils testa braucienu, lai pārbaudītu trigerus.',
+                style: TextStyle(color: Colors.white24, fontSize: 12),
+              ),
+            ],
+          ),
         ),
       );
     }

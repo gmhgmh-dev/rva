@@ -38,13 +38,24 @@ class DrivingAssistantManager extends ChangeNotifier {
     TtsService? ttsService,
     PMTilesService? pmTilesService,
     MapDownloaderService? mapDownloaderService,
-  })  : pmTilesService = pmTilesService ?? PMTilesService(),
-        mapDownloaderService = mapDownloaderService ?? MapDownloaderService(),
-        stateMachine = stateMachine ?? VoiceAssistantStateMachine(),
-        mockLocationService = mockLocationService ?? MockLocationService(),
-        realLocationService = realLocationService ??
-            RealLocationService(pmTilesService: pmTilesService ?? PMTilesService()),
-        ttsService = ttsService ?? TtsService();
+  }) : this._internal(
+          stateMachine: stateMachine ?? VoiceAssistantStateMachine(),
+          mockLocationService: mockLocationService ?? MockLocationService(),
+          ttsService: ttsService ?? TtsService(),
+          pmTilesService: pmTilesService ?? PMTilesService(),
+          mapDownloaderService: mapDownloaderService ?? MapDownloaderService(),
+          realLocationService: realLocationService,
+        );
+
+  DrivingAssistantManager._internal({
+    required this.stateMachine,
+    required this.mockLocationService,
+    required this.ttsService,
+    required this.pmTilesService,
+    required this.mapDownloaderService,
+    RealLocationService? realLocationService,
+  }) : realLocationService = realLocationService ??
+            RealLocationService(pmTilesService: pmTilesService);
 
   DriveMode get mode => _mode;
   RoadPoint? get currentPoint => _currentPoint;
@@ -86,6 +97,7 @@ class DrivingAssistantManager extends ChangeNotifier {
   /// Starts the Ventspils Mock Test Route simulation covering all 4 triggers sequentially.
   Future<void> startVentspilsTestRoute({Duration interval = const Duration(seconds: 2)}) async {
     await stop();
+    _currentPoint = null;
     stateMachine.reset();
     _alertHistory.clear();
     _mode = DriveMode.mockSimulation;
@@ -99,9 +111,11 @@ class DrivingAssistantManager extends ChangeNotifier {
   void stepNextMockPoint() {
     if (_mode != DriveMode.mockSimulation) {
       stateMachine.reset();
+      _alertHistory.clear();
       _mode = DriveMode.mockSimulation;
       _locationSubscription?.cancel();
       _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
+      notifyListeners();
     }
     mockLocationService.nextStep();
   }
@@ -109,6 +123,7 @@ class DrivingAssistantManager extends ChangeNotifier {
   /// Starts tracking using the device's real GPS sensors.
   Future<bool> startRealGps() async {
     await stop();
+    _currentPoint = null;
     stateMachine.reset();
     _alertHistory.clear();
 
@@ -132,6 +147,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     mockLocationService.stopSimulation();
     await realLocationService.stopTracking();
     await ttsService.stop();
+    _currentPoint = null;
     _mode = DriveMode.idle;
     notifyListeners();
   }

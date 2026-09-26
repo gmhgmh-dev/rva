@@ -53,9 +53,38 @@ class RealLocationService {
     await stopTracking();
     _isTracking = true;
 
+    // Reset previous cached attributes so stale demo/old route data is not reused
+    _lastKnownAttributes = null;
+    _lastQueriedLat = null;
+    _lastQueriedLon = null;
+    _lastQueryTime = null;
+
+    // Immediately query last known position or current position so the user
+    // gets immediate feedback even if stationary in their vehicle.
+    Geolocator.getLastKnownPosition().then((lastPos) {
+      if (lastPos != null && _isTracking && _lastKnownAttributes == null) {
+        _handlePositionUpdate(lastPos);
+      }
+    }).catchError((dynamic e) {
+      debugPrint('Geolocator.getLastKnownPosition error: $e');
+    });
+
+    Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 4),
+      ),
+    ).then((currPos) {
+      if (_isTracking) {
+        _handlePositionUpdate(currPos);
+      }
+    }).catchError((dynamic e) {
+      debugPrint('Geolocator.getCurrentPosition initial error: $e');
+    });
+
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 5,
+      distanceFilter: 3,
     );
 
     _positionSubscription = Geolocator.getPositionStream(
@@ -63,7 +92,7 @@ class RealLocationService {
     ).listen((Position position) async {
       await _handlePositionUpdate(position);
     }, onError: (dynamic error) {
-      debugPrint('Real GPS error: $error');
+      debugPrint('Real GPS stream error: $error');
     });
 
     return true;
@@ -95,6 +124,7 @@ class RealLocationService {
             lon: lon,
             speedKmh: speedKmh,
             attributes: roadAttrs,
+            dataSource: 'PMTiles bezsaistes karte',
             timestamp: position.timestamp,
           ));
           return;
@@ -112,6 +142,7 @@ class RealLocationService {
         lon: lon,
         speedKmh: speedKmh,
         attributes: _lastKnownAttributes!,
+        dataSource: 'Overpass kešatmiņa',
         timestamp: position.timestamp,
       ));
       return;
@@ -125,6 +156,7 @@ class RealLocationService {
       lon: lon,
       speedKmh: speedKmh,
       attributes: initialAttrs,
+      dataSource: _lastKnownAttributes != null ? 'Pilsētas ceļš' : 'GPS meklē ceļu...',
       timestamp: position.timestamp,
     ));
 
@@ -153,6 +185,7 @@ class RealLocationService {
           lon: lon,
           speedKmh: speedKmh,
           attributes: fetchedAttrs,
+          dataSource: 'Overpass API tiešsaiste',
           timestamp: position.timestamp,
         ));
       }
@@ -180,6 +213,7 @@ class RealLocationService {
             lon: lon,
             speedKmh: speedKmh,
             attributes: roadAttrs,
+            dataSource: 'PMTiles bezsaistes karte',
             timestamp: position.timestamp,
           );
         }
@@ -195,6 +229,7 @@ class RealLocationService {
         lon: lon,
         speedKmh: speedKmh,
         attributes: _lastKnownAttributes!,
+        dataSource: 'Overpass kešatmiņa',
         timestamp: position.timestamp,
       );
     }
@@ -209,6 +244,7 @@ class RealLocationService {
           lon: lon,
           speedKmh: speedKmh,
           attributes: osmResult,
+          dataSource: 'Overpass API tiešsaiste',
           timestamp: position.timestamp,
         );
       }
@@ -223,15 +259,16 @@ class RealLocationService {
       lon: lon,
       speedKmh: speedKmh,
       attributes: fallbackAttrs,
+      dataSource: 'Pilsētas ceļš',
       timestamp: position.timestamp,
     );
   }
 
-  /// Queries Overpass API across mirrors for the nearest drivable highway within 35m.
+  /// Queries Overpass API across mirrors for the nearest drivable highway within 60m.
   Future<RoadAttributes?> _fetchOsmRoadAttributes(double lat, double lon) async {
     // Exclude pedestrian paths, sidewalks, footways, and cycle tracks
     final query =
-        '[out:json][timeout:3];way(around:35,$lat,$lon)["highway"]["highway"!~"^(footway|path|cycleway|steps|pedestrian|track|corridor|bridleway)"];out tags 1;';
+        '[out:json][timeout:4];way(around:60,$lat,$lon)["highway"]["highway"!~"^(footway|path|cycleway|steps|pedestrian|track|corridor|bridleway)"];out tags 5;';
     final encodedQuery = Uri.encodeComponent(query);
 
     for (final endpoint in overpassEndpoints) {
@@ -243,7 +280,16 @@ class RealLocationService {
           final data = json.decode(bodyString) as Map<String, dynamic>;
           final elements = data['elements'] as List<dynamic>?;
           if (elements != null && elements.isNotEmpty) {
-            final tags = elements.first['tags'] as Map<String, dynamic>?;
+            // Prioritize the highway that has an explicit street name or name:lv
+            dynamic bestElement = elements.first;
+            for (final el in elements) {
+              final t = el['tags'] as Map<String, dynamic>?;
+              if (t != null && (t.containsKey('name') || t.containsKey('name:lv'))) {
+                bestElement = el;
+                break;
+              }
+            }
+            final tags = bestElement['tags'] as Map<String, dynamic>?;
             if (tags != null) {
               return _parseOsmTags(tags);
             }
@@ -319,7 +365,7 @@ class RealLocationService {
     _lastQueryTime = DateTime.now();
   }
 
-  /// Fast local heuristic for Ventspils Old Town fallback
+  /// Fast local heuristic for generic Latvian roads fallback
   RoadAttributes _getLocalHeuristicAttributes(double lat, double lon) {
     int limit = 50;
     bool isOneWay = false;
@@ -335,7 +381,7 @@ class RealLocationService {
         streetName = 'Sofijas iela';
       }
     } else {
-      streetName = 'Lielais prospekts / Galvenā iela';
+      streetName = 'Pilsētas ceļš';
     }
 
     return RoadAttributes(
@@ -351,6 +397,7 @@ class RealLocationService {
     required double lon,
     required double speedKmh,
     required RoadAttributes attributes,
+    required String dataSource,
     DateTime? timestamp,
   }) {
     return RoadPoint(
@@ -361,6 +408,7 @@ class RealLocationService {
       isOneWay: attributes.isOneWay,
       streetName: attributes.name ?? 'Iela',
       timestamp: timestamp ?? DateTime.now(),
+      dataSource: dataSource,
     );
   }
 
