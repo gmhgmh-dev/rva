@@ -29,9 +29,10 @@ class RealLocationService {
 
   /// Public Overpass API mirrors for high availability and failover
   static const List<String> overpassEndpoints = [
-    'https://overpass-api.de/api/interpreter',
-    'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass-api.de/api/interpreter',
   ];
 
   RealLocationService({
@@ -264,31 +265,39 @@ class RealLocationService {
     );
   }
 
-  /// Queries Overpass API across mirrors for the nearest drivable highway within 60m.
+  /// Queries Overpass API across mirrors for the nearest drivable highway within 150m.
   Future<RoadAttributes?> _fetchOsmRoadAttributes(double lat, double lon) async {
     // Exclude pedestrian paths, sidewalks, footways, and cycle tracks
     final query =
-        '[out:json][timeout:4];way(around:60,$lat,$lon)["highway"]["highway"!~"^(footway|path|cycleway|steps|pedestrian|track|corridor|bridleway)"];out tags 5;';
+        '[out:json][timeout:5];way(around:150,$lat,$lon)["highway"]["highway"!~"^(footway|path|cycleway|steps|pedestrian|track|corridor|bridleway)"];out tags 25;';
     final encodedQuery = Uri.encodeComponent(query);
+    final headers = {'User-Agent': 'RoadsVoiceAssistant/1.0 (Latvia)'};
 
     for (final endpoint in overpassEndpoints) {
       try {
         final url = Uri.parse('$endpoint?data=$encodedQuery');
-        final response = await _httpClient.get(url).timeout(const Duration(milliseconds: 2500));
+        final response = await _httpClient.get(url, headers: headers).timeout(const Duration(milliseconds: 3500));
         if (response.statusCode == 200) {
           final bodyString = utf8.decode(response.bodyBytes);
           final data = json.decode(bodyString) as Map<String, dynamic>;
           final elements = data['elements'] as List<dynamic>?;
           if (elements != null && elements.isNotEmpty) {
-            // Prioritize the highway that has an explicit street name or name:lv
-            dynamic bestElement = elements.first;
+            // 1. First priority: find a highway that has an explicit street name or name:lv (e.g. Sarkanmuižas dambis)
+            dynamic bestElement;
             for (final el in elements) {
               final t = el['tags'] as Map<String, dynamic>?;
-              if (t != null && (t.containsKey('name') || t.containsKey('name:lv'))) {
-                bestElement = el;
-                break;
+              if (t != null) {
+                final name = (t['name'] ?? t['name:lv'] ?? t['ref'] ?? t['loc_name'])?.toString().trim();
+                if (name != null && name.isNotEmpty && name.toLowerCase() != 'iela') {
+                  bestElement = el;
+                  break;
+                }
               }
             }
+
+            // 2. Second priority: if no named road found, use the closest drivable element
+            bestElement ??= elements.first;
+
             final tags = bestElement['tags'] as Map<String, dynamic>?;
             if (tags != null) {
               return _parseOsmTags(tags);
@@ -338,7 +347,23 @@ class RealLocationService {
     final rawOneway = tags['oneway']?.toString().toLowerCase();
     final isOneWay = rawOneway == 'yes' || rawOneway == '1' || rawOneway == '-1';
 
-    final name = (tags['name'] ?? tags['name:lv'] ?? tags['ref'] ?? tags['loc_name'])?.toString();
+    String? name = (tags['name'] ?? tags['name:lv'] ?? tags['ref'] ?? tags['loc_name'])?.toString().trim();
+    if (name != null && (name.isEmpty || name.toLowerCase() == 'iela')) {
+      name = null;
+    }
+
+    // Meaningful fallback for unnamed residential / yard ways
+    if (name == null) {
+      if (highway == 'service' || highway == 'parking') {
+        name = 'Pagalma brauktuve';
+      } else if (highway == 'living_street') {
+        name = 'Dzīvojamā zona';
+      } else if (highway == 'residential') {
+        name = 'Dzīvojamais rajons';
+      } else {
+        name = 'Pilsētas ceļš';
+      }
+    }
 
     return RoadAttributes(
       maxspeed: maxspeed,
@@ -369,7 +394,7 @@ class RealLocationService {
   RoadAttributes _getLocalHeuristicAttributes(double lat, double lon) {
     int limit = 50;
     bool isOneWay = false;
-    String streetName = 'Iela';
+    String streetName = 'Pilsētas ceļš';
 
     // Ventspils historic center / quiet zone bounding box:
     if (lat >= 57.3930 && lat <= 57.3975 && lon >= 21.5540 && lon <= 21.5620) {
@@ -400,13 +425,17 @@ class RealLocationService {
     required String dataSource,
     DateTime? timestamp,
   }) {
+    String street = (attributes.name != null && attributes.name!.trim().isNotEmpty && attributes.name!.trim().toLowerCase() != 'iela')
+        ? attributes.name!.trim()
+        : 'Pilsētas ceļš';
+
     return RoadPoint(
       latitude: lat,
       longitude: lon,
       vehicleSpeedKmh: speedKmh,
       maxSpeedLimitKmh: attributes.maxspeed ?? 50,
       isOneWay: attributes.isOneWay,
-      streetName: attributes.name ?? 'Iela',
+      streetName: street,
       timestamp: timestamp ?? DateTime.now(),
       dataSource: dataSource,
     );

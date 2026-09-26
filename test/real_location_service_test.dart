@@ -225,5 +225,84 @@ void main() {
       expect(point.maxSpeedLimitKmh, equals(50));
       expect(point.dataSource, equals('Overpass API tiešsaiste'));
     });
+
+    test('Prioritizes Sarkanmuižas dambis over closer unnamed courtyard driveways (service roads)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              // Unnamed courtyard driveway first in list
+              {
+                'type': 'way',
+                'tags': {
+                  'highway': 'service',
+                }
+              },
+              // Another unnamed driveway
+              {
+                'type': 'way',
+                'tags': {
+                  'highway': 'service',
+                  'maxspeed': '20',
+                }
+              },
+              // The main street nearby
+              {
+                'type': 'way',
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Sarkanmuižas dambis',
+                  'maxspeed': '50',
+                  'oneway': 'no',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      final point = await service.resolveRoadMetadata(_createPosition(57.3935, 21.5710));
+
+      // Successfully picked named street despite unnamed driveways
+      expect(point.streetName, equals('Sarkanmuižas dambis'));
+      expect(point.maxSpeedLimitKmh, equals(50));
+      expect(point.streetName, isNot(equals('Iela')));
+    });
+
+    test('Unnamed courtyard driveway falls back to Pagalma brauktuve instead of Iela', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              {
+                'type': 'way',
+                'tags': {
+                  'highway': 'service',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      final point = await service.resolveRoadMetadata(_createPosition(57.3935, 21.5710));
+
+      expect(point.streetName, equals('Pagalma brauktuve'));
+      expect(point.streetName, isNot(equals('Iela')));
+    });
   });
 }

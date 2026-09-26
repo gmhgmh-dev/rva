@@ -46,7 +46,7 @@ class PMTilesService {
     double lat,
     double lon, {
     int? targetZoom,
-    double maxRadiusMeters = 60.0,
+    double maxRadiusMeters = 150.0,
   }) async {
     final archive = _archive;
     if (archive == null) {
@@ -79,73 +79,107 @@ class PMTilesService {
       final tileBytes = Uint8List.fromList(tile.bytes());
       final vectorTile = VectorTile.fromBytes(bytes: tileBytes);
 
-      // Search for transportation/road layer
-      VectorTileLayer? roadLayer;
-      for (final layer in vectorTile.layers) {
+      // Collect all road-related layers (geometry + names)
+      final roadLayers = vectorTile.layers.where((layer) {
         final nameLower = layer.name.toLowerCase();
-        if (nameLower == 'transportation' ||
+        return nameLower == 'transportation' ||
+            nameLower == 'transportation_name' ||
             nameLower == 'road' ||
-            nameLower == 'roads' ||
-            nameLower == 'transportation_name') {
-          roadLayer = layer;
-          break;
-        }
-      }
+            nameLower == 'roads';
+      }).toList();
 
-      if (roadLayer == null) {
+      if (roadLayers.isEmpty) {
         return null;
       }
 
-      final extent = roadLayer.extent > 0 ? roadLayer.extent : 4096;
+      double minAnyDistanceSq = double.infinity;
+      VectorTileFeature? closestAnyFeature;
+      int extentAny = 4096;
 
-      // Coordinate of (lat, lon) in local tile pixel space
-      final px = (tileXDouble - tileX) * extent;
-      final py = (tileYDouble - tileY) * extent;
+      double minNamedDistanceSq = double.infinity;
+      VectorTileFeature? closestNamedFeature;
+      int extentNamed = 4096;
 
-      // Resolution: meters per tile pixel at this latitude and zoom level
-      final metersPerPixel = (cos(rad) * 40075016.686) / (n * extent);
+      for (final layer in roadLayers) {
+        final extent = layer.extent > 0 ? layer.extent : 4096;
+        final px = (tileXDouble - tileX) * extent;
+        final py = (tileYDouble - tileY) * extent;
 
-      double minDistanceSq = double.infinity;
-      VectorTileFeature? closestFeature;
+        for (final feature in layer.features) {
+          if (feature.type != VectorTileGeomType.LINESTRING) continue;
 
-      for (final feature in roadLayer.features) {
-        if (feature.type != VectorTileGeomType.LINESTRING) continue;
+          final lines = feature.decodeLineString();
+          double featureMinDistSq = double.infinity;
 
-        final lines = feature.decodeLineString();
-        for (final line in lines) {
-          for (var i = 0; i < line.length - 1; i++) {
-            final p1 = line[i];
-            final p2 = line[i + 1];
+          for (final line in lines) {
+            for (var i = 0; i < line.length - 1; i++) {
+              final p1 = line[i];
+              final p2 = line[i + 1];
 
-            final distSq = _pointToSegmentDistanceSq(
-              px,
-              py,
-              p1[0].toDouble(),
-              p1[1].toDouble(),
-              p2[0].toDouble(),
-              p2[1].toDouble(),
-            );
+              final distSq = _pointToSegmentDistanceSq(
+                px,
+                py,
+                p1[0].toDouble(),
+                p1[1].toDouble(),
+                p2[0].toDouble(),
+                p2[1].toDouble(),
+              );
 
-            if (distSq < minDistanceSq) {
-              minDistanceSq = distSq;
-              closestFeature = feature;
+              if (distSq < featureMinDistSq) {
+                featureMinDistSq = distSq;
+              }
             }
+          }
+
+          if (featureMinDistSq < minAnyDistanceSq) {
+            minAnyDistanceSq = featureMinDistSq;
+            closestAnyFeature = feature;
+            extentAny = extent;
+          }
+
+          // Check if this feature has an explicit street name
+          final props = feature.decodeProperties();
+          final hasName = props.containsKey('name') ||
+              props.containsKey('name:latin') ||
+              props.containsKey('name:lv') ||
+              props.containsKey('name:en') ||
+              props.containsKey('ref');
+
+          if (hasName && featureMinDistSq < minNamedDistanceSq) {
+            minNamedDistanceSq = featureMinDistSq;
+            closestNamedFeature = feature;
+            extentNamed = extent;
           }
         }
       }
 
-      if (closestFeature == null || minDistanceSq == double.infinity) {
+      if (closestAnyFeature == null && closestNamedFeature == null) {
         return null;
       }
 
-      final distanceMeters = sqrt(minDistanceSq) * metersPerPixel;
-      if (distanceMeters > maxRadiusMeters) {
-        return null;
+      // Check if closest named feature is within maxRadiusMeters
+      if (closestNamedFeature != null && minNamedDistanceSq != double.infinity) {
+        final metersPerPixelNamed = (cos(rad) * 40075016.686) / (n * extentNamed);
+        final distNamedMeters = sqrt(minNamedDistanceSq) * metersPerPixelNamed;
+
+        if (distNamedMeters <= maxRadiusMeters) {
+          final props = closestNamedFeature.decodeProperties();
+          return _extractRoadAttributes(props, distNamedMeters);
+        }
       }
 
-      final properties = closestFeature.decodeProperties();
-      final parsed = _extractRoadAttributes(properties, distanceMeters);
-      return parsed;
+      // Fallback to closest any feature
+      if (closestAnyFeature != null && minAnyDistanceSq != double.infinity) {
+        final metersPerPixelAny = (cos(rad) * 40075016.686) / (n * extentAny);
+        final distAnyMeters = sqrt(minAnyDistanceSq) * metersPerPixelAny;
+
+        if (distAnyMeters <= maxRadiusMeters) {
+          final props = closestAnyFeature.decodeProperties();
+          return _extractRoadAttributes(props, distAnyMeters);
+        }
+      }
+
+      return null;
     } catch (e, st) {
       debugPrint('PMTiles lookup error at ($lat, $lon): $e\n$st');
       return null;
@@ -205,7 +239,13 @@ class PMTilesService {
       isOneWay = _parseBoolOrOneWay(onewayVal.value);
     }
 
-    // 3. Parse road name
+    // 3. Parse road class
+    final classVal = props['class'] ?? props['highway'];
+    if (classVal != null) {
+      roadClass = classVal.value.toString();
+    }
+
+    // 4. Parse road name
     final nameVal = props['name'] ??
         props['name:latin'] ??
         props['name:lv'] ??
@@ -213,15 +253,23 @@ class PMTilesService {
         props['ref'];
     if (nameVal != null) {
       final str = nameVal.value.toString().trim();
-      if (str.isNotEmpty) {
+      if (str.isNotEmpty && str.toLowerCase() != 'null') {
         name = str;
       }
     }
 
-    // 4. Parse road class
-    final classVal = props['class'] ?? props['highway'];
-    if (classVal != null) {
-      roadClass = classVal.value.toString();
+    // Meaningful fallback for unnamed residential / yard ways
+    if (name == null || name == 'Iela') {
+      final cls = roadClass?.toLowerCase();
+      if (cls == 'service' || cls == 'parking') {
+        name = 'Pagalma brauktuve';
+      } else if (cls == 'living_street') {
+        name = 'Dzīvojamā zona';
+      } else if (cls == 'residential') {
+        name = 'Dzīvojamais rajons';
+      } else {
+        name = 'Pilsētas ceļš';
+      }
     }
 
     return RoadAttributes(
