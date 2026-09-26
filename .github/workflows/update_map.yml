@@ -1,0 +1,64 @@
+name: Update Latvia PMTiles Map
+
+on:
+  schedule:
+    # Runs at 03:00 UTC on the 1st day of every month
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Iemesls manuālai kartes atjaunināšanai'
+        required: false
+        default: 'Manuāla atjaunināšana'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-map:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Download and install go-pmtiles CLI
+        run: |
+          echo "Fetching latest go-pmtiles release..."
+          LATEST_TAG=$(curl -s https://api.github.com/repos/protomaps/go-pmtiles/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          CLEAN_VERSION="${LATEST_TAG#v}"
+          echo "Latest version is $CLEAN_VERSION"
+          
+          DOWNLOAD_URL="https://github.com/protomaps/go-pmtiles/releases/download/${LATEST_TAG}/go-pmtiles_${CLEAN_VERSION}_Linux_x86_64.tar.gz"
+          curl -sL "$DOWNLOAD_URL" -o pmtiles.tar.gz
+          tar -xzf pmtiles.tar.gz
+          chmod +x pmtiles
+          ./pmtiles version
+
+      - name: Extract Latvia PMTiles from daily global build
+        run: |
+          echo "Extracting Latvia PMTiles using bounding box [20.97, 55.67, 28.24, 58.08]..."
+          ./pmtiles extract https://build.protomaps.com/latest.pmtiles latvia.pmtiles --maxzoom=14 --bbox=20.97,55.67,28.24,58.08
+          
+          echo "Checking extracted file size..."
+          ls -lh latvia.pmtiles
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latvijas PMTiles bezsaistes karte (${{ steps.date.outputs.date }})"
+          body: |
+            Automātiski sagatavota Latvijas OpenStreetMap PMTiles vektorkarte lietotnei RVA (Roads Voice Assistant).
+            
+            - **Atjaunināts:** ${{ steps.date.outputs.date }}
+            - **Fails:** `latvia.pmtiles`
+            - **Tiešā lejupielādes saite:** https://github.com/gmhgmh-dev/rva/releases/latest/download/latvia.pmtiles
+          files: latvia.pmtiles
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

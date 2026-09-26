@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="VentspilsVoiceAssistant" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Ventspils Testa Brauciens</name>
+    <desc>Testa maršruts pa Ventspils ielām ar ātruma ierobežojumu un vienvirziena ielu trigeriem</desc>
+  </metadata>
+  <trk>
+    <name>Ventspils 4-Trigeru Testa Brauciens</name>
+    <trkseg>
+      <!-- POSMS 1: Lielais prospekts - Sākums (Atļautais ātrums 50 km/h, Divvirzienu) -->
+      <trkpt lat="57.391500" lon="21.564800">
+        <name>Lielais prospekts 1</name>
+        <extensions>
+          <street_name>Lielais prospekts</street_name>
+          <speed_limit>50</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>45.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+      <trkpt lat="57.392800" lon="21.562900">
+        <name>Lielais prospekts 2</name>
+        <extensions>
+          <street_name>Lielais prospekts</street_name>
+          <speed_limit>50</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>48.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+
+      <!-- POSMS 2: Pagrieziens uz Kuldīgas ielu - Iebraukšana 30 km/h zonā -->
+      <!-- TRIGERIS 1: Samazināts ātruma ierobežojums: 30 kilometri stundā. -->
+      <trkpt lat="57.393900" lon="21.560800">
+        <name>Kuldīgas iela (30 km/h zona)</name>
+        <extensions>
+          <street_name>Kuldīgas iela</street_name>
+          <speed_limit>30</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>28.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+      <trkpt lat="57.394800" lon="21.559200">
+        <name>Kuldīgas iela 2</name>
+        <extensions>
+          <street_name>Kuldīgas iela</street_name>
+          <speed_limit>30</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>29.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+
+      <!-- POSMS 3: Pagrieziens uz Sofijas ielu - Iebraukšana vienvirziena ielā -->
+      <!-- TRIGERIS 3: Jūs atrodaties uz vienvirziena ielas. -->
+      <trkpt lat="57.395600" lon="21.557900">
+        <name>Sofijas iela (Vienvirziena iela)</name>
+        <extensions>
+          <street_name>Sofijas iela</street_name>
+          <speed_limit>30</speed_limit>
+          <oneway>1</oneway>
+          <vehicle_speed>26.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+      <trkpt lat="57.396400" lon="21.556800">
+        <name>Sofijas iela 2</name>
+        <extensions>
+          <street_name>Sofijas iela</street_name>
+          <speed_limit>30</speed_limit>
+          <oneway>1</oneway>
+          <vehicle_speed>27.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+
+      <!-- POSMS 4: Pagrieziens uz Platā iela - Izbraukšana no vienvirziena ielas -->
+      <!-- TRIGERIS 4: Vienvirziena iela ir beigusies. -->
+      <trkpt lat="57.397200" lon="21.555500">
+        <name>Platā iela (Divvirzienu posms)</name>
+        <extensions>
+          <street_name>Platā iela</street_name>
+          <speed_limit>30</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>28.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+
+      <!-- POSMS 5: Atgriešanās uz Lielā prospekta - 30 km/h zonas beigas (atgriežas 50 km/h) -->
+      <!-- TRIGERIS 2: Atruma ierobežojuma zona ir beigusies. -->
+      <trkpt lat="57.398200" lon="21.554200">
+        <name>Lielais prospekts (Zonas beigas, 50 km/h)</name>
+        <extensions>
+          <street_name>Lielais prospekts</street_name>
+          <speed_limit>50</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>45.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+      <trkpt lat="57.399500" lon="21.552800">
+        <name>Lielais prospekts - Finišs</name>
+        <extensions>
+          <street_name>Lielais prospekts</street_name>
+          <speed_limit>50</speed_limit>
+          <oneway>0</oneway>
+          <vehicle_speed>50.0</vehicle_speed>
+        </extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>
