@@ -39,10 +39,28 @@ jobs:
           chmod +x pmtiles
           ./pmtiles version
 
-      - name: Extract Latvia PMTiles from daily global build
+      - name: Extract Latvia PMTiles from recent daily global build
         run: |
           echo "Extracting Latvia PMTiles using bounding box [20.97, 55.67, 28.24, 58.08]..."
-          ./pmtiles extract https://build.protomaps.com/latest.pmtiles latvia.pmtiles --maxzoom=14 --bbox=20.97,55.67,28.24,58.08
+          
+          SUCCESS=0
+          for i in 1 2 3 4; do
+            BUILD_DATE=$(date -u -d "$i days ago" +%Y%m%d)
+            echo "Trying Protomaps build for $BUILD_DATE..."
+            if ./pmtiles extract "https://build.protomaps.com/${BUILD_DATE}.pmtiles" latvia.pmtiles --maxzoom=14 --bbox=20.97,55.67,28.24,58.08; then
+              echo "Successfully extracted Latvia PMTiles from ${BUILD_DATE} build!"
+              SUCCESS=1
+              echo "build_date=$BUILD_DATE" >> $GITHUB_ENV
+              break
+            else
+              echo "Failed to extract from ${BUILD_DATE}, trying previous day..."
+            fi
+          done
+
+          if [ $SUCCESS -ne 1 ]; then
+            echo "Error: Could not extract Latvia PMTiles from recent Protomaps builds."
+            exit 1
+          fi
           
           echo "Checking extracted file size..."
           ls -lh latvia.pmtiles
