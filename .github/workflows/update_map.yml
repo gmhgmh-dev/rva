@@ -26,23 +26,64 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
+      - name: Install Osmium Tool and Tippecanoe
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool curl
+          pipx install tippecanoe
+          pipx ensurepath
+          tippecanoe --version
+
       - name: Download and install go-pmtiles CLI
         run: |
           echo "Fetching latest go-pmtiles release..."
           LATEST_TAG=$(curl -s https://api.github.com/repos/protomaps/go-pmtiles/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
           CLEAN_VERSION="${LATEST_TAG#v}"
-          echo "Latest version is $CLEAN_VERSION"
-          
           DOWNLOAD_URL="https://github.com/protomaps/go-pmtiles/releases/download/${LATEST_TAG}/go-pmtiles_${CLEAN_VERSION}_Linux_x86_64.tar.gz"
           curl -sL "$DOWNLOAD_URL" -o pmtiles.tar.gz
           tar -xzf pmtiles.tar.gz
           chmod +x pmtiles
           ./pmtiles version
 
-      - name: Extract Latvia PMTiles from recent daily global build
+      - name: Generate full Latvia PMTiles with maxspeed and road attributes
+        id: custom_build
+        continue-on-error: true
         run: |
-          echo "Extracting Latvia PMTiles using bounding box [20.97, 55.67, 28.24, 58.08]..."
-          
+          echo "Downloading latest Latvia OSM PBF from Geofabrik..."
+          curl -sL "https://download.geofabrik.de/europe/latvia-latest.osm.pbf" -o latvia.osm.pbf
+          ls -lh latvia.osm.pbf
+
+          echo "Filtering drivable highways using osmium..."
+          osmium tags-filter latvia.osm.pbf w/highway -o latvia_highways.osm.pbf
+          ls -lh latvia_highways.osm.pbf
+
+          echo "Exporting linestring geometries to GeoJSONSeq..."
+          osmium export latvia_highways.osm.pbf --geometry-types=linestring -o latvia_roads.geojsonseq
+          ls -lh latvia_roads.geojsonseq
+
+          echo "Building PMTiles vector archive with Tippecanoe (layer: transportation, zoom 7-14)..."
+          tippecanoe -o latvia.pmtiles \
+            -l transportation \
+            -z14 \
+            -Z7 \
+            --drop-densest-as-needed \
+            --extend-zooms-if-still-dropping \
+            latvia_roads.geojsonseq
+
+          echo "Checking generated latvia.pmtiles..."
+          if [ -s latvia.pmtiles ]; then
+            echo "Successfully generated full custom latvia.pmtiles!"
+            ls -lh latvia.pmtiles
+            echo "build_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "Failed to generate latvia.pmtiles"
+            exit 1
+          fi
+
+      - name: Fallback to Protomaps daily extract if custom build failed
+        if: steps.custom_build.outputs.build_success != 'true'
+        run: |
+          echo "Primary custom build was not completed. Falling back to Protomaps daily build extraction..."
           SUCCESS=0
           for i in 1 2 3 4; do
             BUILD_DATE=$(date -u -d "$i days ago" +%Y%m%d)
@@ -50,19 +91,14 @@ jobs:
             if ./pmtiles extract "https://build.protomaps.com/${BUILD_DATE}.pmtiles" latvia.pmtiles --maxzoom=14 --bbox=20.97,55.67,28.24,58.08; then
               echo "Successfully extracted Latvia PMTiles from ${BUILD_DATE} build!"
               SUCCESS=1
-              echo "build_date=$BUILD_DATE" >> $GITHUB_ENV
               break
-            else
-              echo "Failed to extract from ${BUILD_DATE}, trying previous day..."
             fi
           done
 
           if [ $SUCCESS -ne 1 ]; then
-            echo "Error: Could not extract Latvia PMTiles from recent Protomaps builds."
+            echo "Error: Both primary build and Protomaps fallback failed."
             exit 1
           fi
-          
-          echo "Checking extracted file size..."
           ls -lh latvia.pmtiles
 
       - name: Publish to GitHub Releases
@@ -74,6 +110,7 @@ jobs:
             Automātiski sagatavota Latvijas OpenStreetMap PMTiles vektorkarte lietotnei RVA (Roads Voice Assistant).
             
             - **Atjaunināts:** ${{ steps.date.outputs.date }}
+            - **Saturs:** Visi Latvijas ceļi un ielas ar pilniem `maxspeed`, `zone:maxspeed`, `oneway` un nosaukumu atribūtiem.
             - **Fails:** `latvia.pmtiles`
             - **Tiešā lejupielādes saite:** https://github.com/gmhgmh-dev/rva/releases/latest/download/latvia.pmtiles
           files: latvia.pmtiles

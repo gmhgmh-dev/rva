@@ -228,7 +228,11 @@ class PMTilesService {
     String? roadClass;
 
     // 1. Parse maxspeed
-    final speedVal = props['maxspeed'] ?? props['maxspeed:forward'] ?? props['maxspeed:backward'];
+    final speedVal = props['maxspeed'] ??
+        props['zone:maxspeed'] ??
+        props['source:maxspeed'] ??
+        props['maxspeed:forward'] ??
+        props['maxspeed:backward'];
     if (speedVal != null) {
       maxspeed = _parseIntValue(speedVal.value);
     }
@@ -284,6 +288,11 @@ class PMTilesService {
   static int? _parseIntValue(Object value) {
     if (value is int) return value;
     final str = value.toString().trim();
+    if (str == 'LV:urban' || str == 'urban') return 50;
+    if (str == 'LV:rural' || str == 'rural') return 90;
+    if (str == 'LV:living_street' || str == 'living_street') return 20;
+    if (str == 'LV:zone30' || str == 'zone30') return 30;
+
     // Sometimes values are formatted as "50", "90 km/h", etc.
     final match = RegExp(r'\d+').firstMatch(str);
     if (match != null) {
