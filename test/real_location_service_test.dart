@@ -304,5 +304,95 @@ void main() {
       expect(point.streetName, equals('Pagalma brauktuve'));
       expect(point.streetName, isNot(equals('Iela')));
     });
+
+    test('Prioritizes 30 km/h zone over 50 km/h on Sarkanmuižas dambis when both ways exist', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              // Older 50 km/h segment with lower OSM ID
+              {
+                'type': 'way',
+                'id': 4966468,
+                'center': {'lat': 57.3936, 'lon': 21.5695},
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Sarkanmuižas dambis',
+                  'maxspeed': '50',
+                }
+              },
+              // 30 km/h school & sports center segment
+              {
+                'type': 'way',
+                'id': 32719335,
+                'center': {'lat': 57.3925, 'lon': 21.5730},
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Sarkanmuižas dambis',
+                  'maxspeed': '30',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      final point = await service.resolveRoadMetadata(_createPosition(57.3926, 21.5728));
+
+      expect(point.streetName, equals('Sarkanmuižas dambis'));
+      expect(point.maxSpeedLimitKmh, equals(30));
+    });
+
+    test('Prioritizes 30 km/h zone on Rīgas iela near Katoļu iela', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              // 50 km/h segment
+              {
+                'type': 'way',
+                'id': 23361194,
+                'center': {'lat': 57.3940, 'lon': 21.5585},
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Rīgas iela',
+                  'maxspeed': '50',
+                }
+              },
+              // 30 km/h historic center segment approaching Katoļu iela
+              {
+                'type': 'way',
+                'id': 1324399793,
+                'center': {'lat': 57.3936, 'lon': 21.5570},
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Rīgas iela',
+                  'maxspeed': '30',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      final point = await service.resolveRoadMetadata(_createPosition(57.3936, 21.5568));
+
+      expect(point.streetName, equals('Rīgas iela'));
+      expect(point.maxSpeedLimitKmh, equals(30));
+    });
   });
 }

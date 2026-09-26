@@ -14,6 +14,22 @@ class RoadAttributes {
     this.roadClass,
   });
 
+  RoadAttributes copyWith({
+    int? maxspeed,
+    bool? isOneWay,
+    String? name,
+    double? distanceMeters,
+    String? roadClass,
+  }) {
+    return RoadAttributes(
+      maxspeed: maxspeed ?? this.maxspeed,
+      isOneWay: isOneWay ?? this.isOneWay,
+      name: name ?? this.name,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+      roadClass: roadClass ?? this.roadClass,
+    );
+  }
+
   @override
   String toString() {
     return 'RoadAttributes(name: $name, maxspeed: $maxspeed, oneway: $isOneWay, distance: ${distanceMeters?.toStringAsFixed(1)}m, class: $roadClass)';

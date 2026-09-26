@@ -83,10 +83,26 @@ class RealLocationService {
       debugPrint('Geolocator.getCurrentPosition initial error: $e');
     });
 
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 3,
-    );
+    late final LocationSettings locationSettings;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 2,
+        forceLocationManager: false,
+        intervalDuration: const Duration(milliseconds: 1000),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'Roads Voice Assistant',
+          notificationText: 'Aktīva maršruta un ātruma ierobežojumu izsekošana',
+          enableWakeLock: true,
+          setOngoing: true,
+        ),
+      );
+    } else {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 2,
+      );
+    }
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
@@ -119,15 +135,29 @@ class RealLocationService {
       try {
         final roadAttrs = await pmTilesService!.getRoadAttributes(lat, lon);
         if (roadAttrs != null) {
-          _updateCache(lat, lon, roadAttrs);
+          final effectiveSpeed = resolveSpeedLimit(
+            lat: lat,
+            lon: lon,
+            explicitMaxspeed: roadAttrs.maxspeed,
+            streetName: roadAttrs.name,
+            roadClass: roadAttrs.roadClass,
+          );
+          final enrichedAttrs = roadAttrs.copyWith(maxspeed: effectiveSpeed);
+
+          _updateCache(lat, lon, enrichedAttrs);
           _pointController.add(_createRoadPoint(
             lat: lat,
             lon: lon,
             speedKmh: speedKmh,
-            attributes: roadAttrs,
+            attributes: enrichedAttrs,
             dataSource: 'PMTiles bezsaistes karte',
             timestamp: position.timestamp,
           ));
+
+          // If PMTiles tile lacked explicit maxspeed, concurrently query Overpass to verify
+          if (roadAttrs.maxspeed == null) {
+            _fetchOverpassAttributesConcurrently(lat, lon, position, speedKmh);
+          }
           return;
         }
       } catch (e) {
@@ -208,12 +238,21 @@ class RealLocationService {
       try {
         final roadAttrs = await pmTilesService!.getRoadAttributes(lat, lon);
         if (roadAttrs != null) {
-          _updateCache(lat, lon, roadAttrs);
+          final effectiveSpeed = resolveSpeedLimit(
+            lat: lat,
+            lon: lon,
+            explicitMaxspeed: roadAttrs.maxspeed,
+            streetName: roadAttrs.name,
+            roadClass: roadAttrs.roadClass,
+          );
+          final enrichedAttrs = roadAttrs.copyWith(maxspeed: effectiveSpeed);
+
+          _updateCache(lat, lon, enrichedAttrs);
           return _createRoadPoint(
             lat: lat,
             lon: lon,
             speedKmh: speedKmh,
-            attributes: roadAttrs,
+            attributes: enrichedAttrs,
             dataSource: 'PMTiles bezsaistes karte',
             timestamp: position.timestamp,
           );
@@ -265,11 +304,12 @@ class RealLocationService {
     );
   }
 
-  /// Queries Overpass API across mirrors for the nearest drivable highway within 150m.
+  /// Queries Overpass API across mirrors for the nearest drivable highway within 100m,
+  /// prioritizing safety-critical reduced speed limits (e.g. 30 km/h zones).
   Future<RoadAttributes?> _fetchOsmRoadAttributes(double lat, double lon) async {
     // Exclude pedestrian paths, sidewalks, footways, and cycle tracks
     final query =
-        '[out:json][timeout:5];way(around:150,$lat,$lon)["highway"]["highway"!~"^(footway|path|cycleway|steps|pedestrian|track|corridor|bridleway)"];out tags 25;';
+        '[out:json][timeout:5];way(around:100,$lat,$lon)["highway"]["highway"!~"^(footway|path|cycleway|steps|pedestrian|track|corridor|bridleway)"];out center tags 30;';
     final encodedQuery = Uri.encodeComponent(query);
     final headers = {'User-Agent': 'RoadsVoiceAssistant/1.0 (Latvia)'};
 
@@ -282,26 +322,91 @@ class RealLocationService {
           final data = json.decode(bodyString) as Map<String, dynamic>;
           final elements = data['elements'] as List<dynamic>?;
           if (elements != null && elements.isNotEmpty) {
-            // 1. First priority: find a highway that has an explicit street name or name:lv (e.g. Sarkanmuižas dambis)
-            dynamic bestElement;
+            final candidates = <_OsmCandidate>[];
+
             for (final el in elements) {
               final t = el['tags'] as Map<String, dynamic>?;
-              if (t != null) {
-                final name = (t['name'] ?? t['name:lv'] ?? t['ref'] ?? t['loc_name'])?.toString().trim();
-                if (name != null && name.isNotEmpty && name.toLowerCase() != 'iela') {
-                  bestElement = el;
+              if (t == null) continue;
+
+              final parsed = _parseOsmTags(t);
+              double dist = double.infinity;
+              final center = el['center'] as Map<String, dynamic>?;
+              if (center != null && center['lat'] != null && center['lon'] != null) {
+                dist = _distanceMeters(
+                  lat,
+                  lon,
+                  (center['lat'] as num).toDouble(),
+                  (center['lon'] as num).toDouble(),
+                );
+              }
+
+              candidates.add(_OsmCandidate(
+                element: el,
+                attributes: parsed,
+                distanceMeters: dist,
+              ));
+            }
+
+            if (candidates.isEmpty) return null;
+
+            // 1. Separate named thoroughfares from unnamed service/driveways
+            final namedCandidates = candidates.where((c) {
+              final n = c.attributes.name;
+              return n != null &&
+                  n.isNotEmpty &&
+                  n != 'Pilsētas ceļš' &&
+                  n != 'Pagalma brauktuve' &&
+                  n != 'Dzīvojamā zona' &&
+                  n != 'Dzīvojamais rajons';
+            }).toList();
+
+            _OsmCandidate? bestCandidate;
+
+            if (namedCandidates.isNotEmpty) {
+              // Safety Priority on named roads:
+              // If any named road within 75m has an active reduced speed limit (< 50 km/h, e.g. 30 km/h zone),
+              // prioritize this reduced speed segment!
+              for (final cand in namedCandidates) {
+                if (cand.distanceMeters <= 75.0 &&
+                    cand.attributes.maxspeed != null &&
+                    cand.attributes.maxspeed! < 50) {
+                  bestCandidate = cand;
                   break;
                 }
               }
+
+              // Otherwise pick the closest named road
+              if (bestCandidate == null) {
+                namedCandidates.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+                bestCandidate = namedCandidates.first;
+              }
+            } else {
+              // No named road candidates: check if any drivable way has reduced speed
+              for (final cand in candidates) {
+                if (cand.distanceMeters <= 70.0 &&
+                    cand.attributes.maxspeed != null &&
+                    cand.attributes.maxspeed! < 50) {
+                  bestCandidate = cand;
+                  break;
+                }
+              }
+              // Fallback to absolute closest candidate
+              if (bestCandidate == null) {
+                candidates.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+                bestCandidate = candidates.first;
+              }
             }
 
-            // 2. Second priority: if no named road found, use the closest drivable element
-            bestElement ??= elements.first;
+            final chosenAttrs = bestCandidate.attributes;
+            final resolvedLimit = resolveSpeedLimit(
+              lat: lat,
+              lon: lon,
+              explicitMaxspeed: chosenAttrs.maxspeed,
+              streetName: chosenAttrs.name,
+              roadClass: chosenAttrs.roadClass,
+            );
 
-            final tags = bestElement['tags'] as Map<String, dynamic>?;
-            if (tags != null) {
-              return _parseOsmTags(tags);
-            }
+            return chosenAttrs.copyWith(maxspeed: resolvedLimit);
           }
           return null;
         }
@@ -315,7 +420,9 @@ class RealLocationService {
   /// Parses OpenStreetMap tags into [RoadAttributes], supporting Latvian speed limit conventions.
   RoadAttributes _parseOsmTags(Map<String, dynamic> tags) {
     int? maxspeed;
-    final rawMaxspeed = tags['maxspeed']?.toString().trim();
+    final rawMaxspeed = tags['maxspeed']?.toString().trim() ??
+        tags['zone:maxspeed']?.toString().trim() ??
+        tags['source:maxspeed']?.toString().trim();
 
     if (rawMaxspeed != null) {
       if (rawMaxspeed == 'LV:urban' || rawMaxspeed == 'urban') {
@@ -324,6 +431,8 @@ class RealLocationService {
         maxspeed = 90;
       } else if (rawMaxspeed == 'LV:living_street' || rawMaxspeed == 'living_street') {
         maxspeed = 20;
+      } else if (rawMaxspeed == 'LV:zone30' || rawMaxspeed == 'zone30' || rawMaxspeed == '30') {
+        maxspeed = 30;
       } else {
         final match = RegExp(r'\d+').firstMatch(rawMaxspeed);
         if (match != null) {
@@ -339,8 +448,6 @@ class RealLocationService {
         maxspeed = 20;
       } else if (highway == 'motorway') {
         maxspeed = 110;
-      } else {
-        maxspeed = 50;
       }
     }
 
@@ -378,9 +485,26 @@ class RealLocationService {
     if (_lastKnownAttributes == null || _lastQueriedLat == null || _lastQueriedLon == null || _lastQueryTime == null) {
       return false;
     }
+    // If approaching or entering a zone with a different expected speed, immediately invalidate cache
+    final wasInZone = isInsideReducedSpeedZone(_lastQueriedLat!, _lastQueriedLon!);
+    final nowInZone = isInsideReducedSpeedZone(lat, lon);
+    if (wasInZone != nowInZone) {
+      return false;
+    }
+
     final distance = _distanceMeters(lat, lon, _lastQueriedLat!, _lastQueriedLon!);
-    final isRecent = DateTime.now().difference(_lastQueryTime!).inSeconds < 20;
+    final isRecent = DateTime.now().difference(_lastQueryTime!).inSeconds < 15;
     return distance < 30.0 && isRecent;
+  }
+
+  static bool isInsideReducedSpeedZone(double lat, double lon) {
+    if (lat >= 57.3912 && lat <= 57.3936 && lon >= 21.5690 && lon <= 21.5780) {
+      return true;
+    }
+    if (lat >= 57.3905 && lat <= 57.3980 && lon >= 21.5510 && lon <= 21.5630) {
+      return true;
+    }
+    return false;
   }
 
   void _updateCache(double lat, double lon, RoadAttributes attributes) {
@@ -390,30 +514,61 @@ class RealLocationService {
     _lastQueryTime = DateTime.now();
   }
 
+  /// Resolves the effective speed limit, prioritizing explicit OSM limits,
+  /// followed by known Ventspils 30 km/h zones and living street rules.
+  static int resolveSpeedLimit({
+    required double lat,
+    required double lon,
+    int? explicitMaxspeed,
+    String? streetName,
+    String? roadClass,
+  }) {
+    if (explicitMaxspeed != null) {
+      return explicitMaxspeed;
+    }
+
+    // 1. Sarkanmuižas dambis school & sports complex 30 km/h zone
+    if (lat >= 57.3912 && lat <= 57.3936 && lon >= 21.5690 && lon <= 21.5780) {
+      return 30;
+    }
+
+    // 2. Ventspils historic center & Rīgas / Katoļu / Sofijas iela 30 km/h zone
+    if (lat >= 57.3905 && lat <= 57.3980 && lon >= 21.5510 && lon <= 21.5630) {
+      return 30;
+    }
+
+    // 3. Living street / residential courtyard
+    if (roadClass == 'living_street') {
+      return 20;
+    }
+
+    return 50;
+  }
+
   /// Fast local heuristic for generic Latvian roads fallback
   RoadAttributes _getLocalHeuristicAttributes(double lat, double lon) {
-    int limit = 50;
+    final limit = resolveSpeedLimit(lat: lat, lon: lon);
     bool isOneWay = false;
     String streetName = 'Pilsētas ceļš';
 
-    // Ventspils historic center / quiet zone bounding box:
-    if (lat >= 57.3930 && lat <= 57.3975 && lon >= 21.5540 && lon <= 21.5620) {
-      limit = 30;
-      streetName = 'Ventspils centrs';
-
+    if (lat >= 57.3912 && lat <= 57.3936 && lon >= 21.5690 && lon <= 21.5780) {
+      streetName = 'Sarkanmuižas dambis';
+    } else if (lat >= 57.3905 && lat <= 57.3980 && lon >= 21.5510 && lon <= 21.5630) {
       if (lat >= 57.3950 && lat <= 57.3968 && lon >= 21.5560 && lon <= 21.5590) {
         isOneWay = true;
         streetName = 'Sofijas iela';
+      } else if (lat >= 57.3930 && lat <= 57.3942 && lon >= 21.5530 && lon <= 21.5590) {
+        streetName = 'Rīgas iela';
+      } else {
+        streetName = 'Ventspils centrs';
       }
-    } else {
-      streetName = 'Pilsētas ceļš';
     }
 
     return RoadAttributes(
       maxspeed: limit,
       isOneWay: isOneWay,
       name: streetName,
-      roadClass: 'residential',
+      roadClass: limit == 30 ? 'residential' : 'primary',
     );
   }
 
@@ -429,11 +584,19 @@ class RealLocationService {
         ? attributes.name!.trim()
         : 'Pilsētas ceļš';
 
+    final effectiveMaxSpeed = resolveSpeedLimit(
+      lat: lat,
+      lon: lon,
+      explicitMaxspeed: attributes.maxspeed,
+      streetName: street,
+      roadClass: attributes.roadClass,
+    );
+
     return RoadPoint(
       latitude: lat,
       longitude: lon,
       vehicleSpeedKmh: speedKmh,
-      maxSpeedLimitKmh: attributes.maxspeed ?? 50,
+      maxSpeedLimitKmh: effectiveMaxSpeed,
       isOneWay: attributes.isOneWay,
       streetName: street,
       timestamp: timestamp ?? DateTime.now(),
@@ -477,4 +640,16 @@ class RealLocationService {
     _httpClient.close();
     _pointController.close();
   }
+}
+
+class _OsmCandidate {
+  final dynamic element;
+  final RoadAttributes attributes;
+  final double distanceMeters;
+
+  _OsmCandidate({
+    required this.element,
+    required this.attributes,
+    required this.distanceMeters,
+  });
 }
