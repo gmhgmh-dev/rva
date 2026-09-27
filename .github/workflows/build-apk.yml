@@ -44,7 +44,7 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           python3 - << 'EOF'
-          import os, base64, subprocess
+          import os, base64, subprocess, hashlib
 
           b64 = os.environ.get("KEYSTORE_BASE64", "").strip()
           key_alias = os.environ.get("KEY_ALIAS", "").strip()
@@ -52,37 +52,55 @@ jobs:
           store_pwd = os.environ.get("STORE_PASSWORD", "").strip()
 
           if b64:
-              print("Decoding keystore...")
-              raw_bytes = base64.b64decode(b64)
-              with open("android/app/upload-keystore.jks", "wb") as f:
-                  f.write(raw_bytes)
-              
-              detected_alias = None
               try:
-                  res = subprocess.run(
-                      ["keytool", "-list", "-keystore", "android/app/upload-keystore.jks", "-storepass", store_pwd],
+                  raw_bytes = base64.b64decode(b64)
+                  with open("android/app/upload-keystore.jks", "wb") as f:
+                      f.write(raw_bytes)
+
+                  sha = hashlib.sha256(raw_bytes).hexdigest()
+                  print(f"Decoded keystore: {len(raw_bytes)} bytes, SHA256: {sha}")
+
+                  # Inspect keystore to find alias
+                  detected_alias = None
+                  res_list = subprocess.run(
+                      ["keytool", "-list", "-v", "-keystore", "android/app/upload-keystore.jks", "-storepass", store_pwd],
                       capture_output=True, text=True
                   )
-                  for line in res.stdout.splitlines():
-                      if "PrivateKeyEntry" in line:
-                          detected_alias = line.split(",")[0].strip()
-                          print(f"Detected key alias from keystore: '{detected_alias}'")
+                  for line in res_list.stdout.splitlines():
+                      if "Alias name:" in line:
+                          detected_alias = line.split(":", 1)[1].strip()
+                          print(f"Found keystore alias: '{detected_alias}'")
                           break
+
+                  final_alias = detected_alias or key_alias or "upload"
+                  print(f"Testing alias '{final_alias}' with keytool...")
+
+                  test_res = subprocess.run(
+                      ["keytool", "-certreq", "-alias", final_alias, "-keystore", "android/app/upload-keystore.jks", "-storepass", store_pwd, "-keypass", key_pwd],
+                      capture_output=True, text=True
+                  )
+
+                  if test_res.returncode == 0:
+                      print("Keystore credentials verified successfully! Writing key.properties...")
+                      with open("android/key.properties", "w", encoding="utf-8") as f:
+                          f.write(f"storePassword={store_pwd}\n")
+                          f.write(f"keyPassword={key_pwd}\n")
+                          f.write(f"keyAlias={final_alias}\n")
+                          f.write("storeFile=upload-keystore.jks\n")
+                  else:
+                      print("WARNING: Keystore credentials test failed:")
+                      print(test_res.stderr or test_res.stdout)
+                      print("Building with debug signing fallback to ensure APK is generated.")
+                      if os.path.exists("android/key.properties"):
+                          os.remove("android/key.properties")
               except Exception as e:
-                  print("Keytool inspection notice:", e)
-
-              final_alias = detected_alias or key_alias
-              print(f"Using key alias: '{final_alias}'")
-
-              with open("android/key.properties", "w", encoding="utf-8") as f:
-                  f.write(f"storePassword={store_pwd}\n")
-                  f.write(f"keyPassword={key_pwd}\n")
-                  f.write(f"keyAlias={final_alias}\n")
-                  f.write("storeFile=upload-keystore.jks\n")
-              
-              print(f"Keystore successfully configured ({len(raw_bytes)} bytes).")
+                  print(f"Error handling keystore: {e}")
+                  if os.path.exists("android/key.properties"):
+                      os.remove("android/key.properties")
           else:
-              print("Keystore secret not found, building debug/unsigned...")
+              print("No KEYSTORE_BASE64 secret found, building with debug signing...")
+              if os.path.exists("android/key.properties"):
+                  os.remove("android/key.properties")
           EOF
 
       - name: Build APK
