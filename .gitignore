@@ -54,3 +54,6 @@ local.properties
 .gradle/
 android/.gradle/
 android/local.properties
+
+# Secrets & Telegram Bridge
+scripts/telegram_bridge.py
