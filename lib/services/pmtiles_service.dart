@@ -177,7 +177,7 @@ class PMTilesService {
         final metersPerPixelLiving = (cos(rad) * 40075016.686) / (n * extentLiving);
         final distLivingMeters = sqrt(minLivingDistanceSq) * metersPerPixelLiving;
 
-        if (distLivingMeters <= 35.0) {
+        if (distLivingMeters <= 15.0) {
           final props = closestLivingFeature.decodeProperties();
           return _extractRoadAttributes(props, distLivingMeters);
         }

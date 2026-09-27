@@ -144,9 +144,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 40),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Status & File Info Card
@@ -182,9 +183,202 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // Advanced URL Settings
             _buildAdvancedSettings(isDownloading),
+
+            const Divider(color: Color(0xFF2C323F), height: 32),
+            
+            // App settings
+            _buildAppSettings(),
           ],
         ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildAppSettings() {
+    final settings = widget.assistantManager.settingsService;
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Balss asistenta iestatījumi',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _buildSwitch(
+              title: 'Klusuma režīms',
+              subtitle: 'Atslēdz visas balss norādes. Darbosies tikai vizuālie brīdinājumi.',
+              value: settings.isMuted,
+              onChanged: (val) => settings.setIsMuted(val),
+            ),
+            _buildSwitch(
+              title: 'Dinamiskās frāzes',
+              subtitle: 'Izrunā pilnus teikumus ar ātruma vienībām, nevis lakoniskus paziņojumus.',
+              value: settings.useDynamicPhrases,
+              onChanged: (val) => settings.setUseDynamicPhrases(val),
+            ),
+            _buildSwitch(
+              title: 'Paziņot ielu nosaukumus',
+              subtitle: 'Nosauc ielas nosaukumu pie katras krustojuma/ielas maiņas.',
+              value: settings.announceStreetChanges,
+              onChanged: (val) => settings.setAnnounceStreetChanges(val),
+            ),
+            _buildSwitch(
+              title: 'Īss pīkstiens balss vietā',
+              subtitle: 'Ātruma pārsniegšanas gadījumā atskaņos tikai īsu brīdinājuma signālu.',
+              value: settings.speedingBeepOnly,
+              onChanged: (val) => settings.setSpeedingBeepOnly(val),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Ātruma brīdinājuma atkārtošanas intervāls',
+              style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int>(
+              value: settings.speedWarningInterval,
+              dropdownColor: const Color(0xFF1E222B),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF1E222B),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              items: const [
+                DropdownMenuItem(value: 5, child: Text('5 sekundes')),
+                DropdownMenuItem(value: 10, child: Text('10 sekundes')),
+                DropdownMenuItem(value: 15, child: Text('15 sekundes')),
+                DropdownMenuItem(value: 30, child: Text('30 sekundes')),
+                DropdownMenuItem(value: 9999, child: Text('Brīdināt tikai vienreiz')),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  settings.setSpeedWarningInterval(val);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Ātruma pārsniegšanas tolerance',
+              style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int>(
+              value: settings.speedTolerance,
+              dropdownColor: const Color(0xFF1E222B),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF1E222B),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('+0 km/h (Stingrs)')),
+                DropdownMenuItem(value: 3, child: Text('+3 km/h')),
+                DropdownMenuItem(value: 5, child: Text('+5 km/h')),
+                DropdownMenuItem(value: 10, child: Text('+10 km/h')),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  settings.setSpeedTolerance(val);
+                }
+              },
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Sistēmas iestatījumi',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _buildSwitch(
+              title: 'Automātiska GPS palaišana',
+              subtitle: 'Sākt GPS izsekošanu uzreiz pēc lietotnes atvēršanas.',
+              value: settings.autoStartGps,
+              onChanged: (val) => settings.setAutoStartGps(val),
+            ),
+            _buildSwitch(
+              title: 'Neizslēgt ekrānu',
+              subtitle: 'Uzturēt telefona ekrānu ieslēgtu, kamēr lietotne ir atvērta (Wakelock).',
+              value: settings.keepScreenOn,
+              onChanged: (val) => settings.setKeepScreenOn(val),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Brauciena datu ierakstīšana',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _buildSwitch(
+              title: 'Ierakstīt GPX maršrutu',
+              subtitle: 'Saglabā GPS koordinātas, ātrumu un ielas .gpx failā, ko var atvērt kartēs.',
+              value: settings.recordGpx,
+              onChanged: (val) => settings.setRecordGpx(val),
+            ),
+            _buildSwitch(
+              title: 'Ierakstīt brīdinājumu žurnālu (.log)',
+              subtitle: 'Saglabā visus saņemtos balss paziņojumus un ātruma trauksmes teksta failā.',
+              value: settings.recordAlertLogs,
+              onChanged: (val) => settings.setRecordAlertLogs(val),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('Eksportēt datus'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.cyan.withOpacity(0.2),
+                      foregroundColor: Colors.cyanAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      widget.assistantManager.tripRecorderService.shareRecordedFiles();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Dzēst datus'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent.withOpacity(0.1),
+                      foregroundColor: Colors.redAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      widget.assistantManager.tripRecorderService.deleteAllRecordedFiles();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Visi saglabātie braucienu faili ir dzēsti.')),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSwitch({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      activeColor: Colors.cyanAccent,
+      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      value: value,
+      onChanged: onChanged,
     );
   }
 

@@ -9,6 +9,12 @@ import 'real_location_service.dart';
 import 'tts_service.dart';
 import 'voice_assistant_state_machine.dart';
 
+import 'package:audioplayers/audioplayers.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+
+import 'settings_service.dart';
+import 'trip_recorder_service.dart';
+
 enum DriveMode {
   idle,
   mockSimulation,
@@ -18,12 +24,15 @@ enum DriveMode {
 /// Orchestrator coordinating Location updates, State Machine transitions,
 /// and Latvian Text-To-Speech announcements.
 class DrivingAssistantManager extends ChangeNotifier {
-  final VoiceAssistantStateMachine stateMachine;
+  final SettingsService settingsService;
+  late final VoiceAssistantStateMachine stateMachine;
   final MockLocationService mockLocationService;
   final RealLocationService realLocationService;
   final TtsService ttsService;
   final PMTilesService pmTilesService;
   final MapDownloaderService mapDownloaderService;
+  final TripRecorderService tripRecorderService;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   DriveMode _mode = DriveMode.idle;
   RoadPoint? _currentPoint;
@@ -32,34 +41,44 @@ class DrivingAssistantManager extends ChangeNotifier {
   bool _isMuted = false;
 
   DrivingAssistantManager({
+    SettingsService? settingsService,
     VoiceAssistantStateMachine? stateMachine,
     MockLocationService? mockLocationService,
     RealLocationService? realLocationService,
     TtsService? ttsService,
     PMTilesService? pmTilesService,
     MapDownloaderService? mapDownloaderService,
-  }) : this._internal(
-          stateMachine: stateMachine ??
-              VoiceAssistantStateMachine(
-                announceStreetChanges: true,
-                useDynamicPhrases: true,
-              ),
-          mockLocationService: mockLocationService ?? MockLocationService(),
-          ttsService: ttsService ?? TtsService(),
-          pmTilesService: pmTilesService ?? PMTilesService(),
-          mapDownloaderService: mapDownloaderService ?? MapDownloaderService(),
-          realLocationService: realLocationService,
+    TripRecorderService? tripRecorderService,
+  })  : settingsService = settingsService ?? SettingsService(),
+        mockLocationService = mockLocationService ?? MockLocationService(),
+        ttsService = ttsService ?? TtsService(),
+        pmTilesService = pmTilesService ?? PMTilesService(),
+        mapDownloaderService = mapDownloaderService ?? MapDownloaderService(),
+        tripRecorderService = tripRecorderService ?? TripRecorderService(),
+        realLocationService = realLocationService ?? RealLocationService(pmTilesService: pmTilesService ?? PMTilesService()) {
+    this.stateMachine = stateMachine ??
+        VoiceAssistantStateMachine(
+          announceStreetChanges: this.settingsService.announceStreetChanges,
+          useDynamicPhrases: this.settingsService.useDynamicPhrases,
         );
+        
+    this.settingsService.addListener(_onSettingsChanged);
+  }
 
-  DrivingAssistantManager._internal({
-    required this.stateMachine,
-    required this.mockLocationService,
-    required this.ttsService,
-    required this.pmTilesService,
-    required this.mapDownloaderService,
-    RealLocationService? realLocationService,
-  }) : realLocationService = realLocationService ??
-            RealLocationService(pmTilesService: pmTilesService);
+  void _onSettingsChanged() {
+    stateMachine.announceStreetChanges = settingsService.announceStreetChanges;
+    stateMachine.useDynamicPhrases = settingsService.useDynamicPhrases;
+    _isMuted = settingsService.isMuted;
+    
+    if (settingsService.keepScreenOn) {
+      WakelockPlus.enable();
+    } else {
+      WakelockPlus.disable();
+    }
+    
+    notifyListeners();
+  }
+
 
   DriveMode get mode => _mode;
   RoadPoint? get currentPoint => _currentPoint;
@@ -74,6 +93,8 @@ class DrivingAssistantManager extends ChangeNotifier {
   bool get isOfflineMapLoaded => pmTilesService.isLoaded;
 
   Future<void> init({bool loadAsset = true}) async {
+    await settingsService.loadSettings();
+    _onSettingsChanged(); // Apply initial settings like wakelock
     await ttsService.init();
     if (loadAsset) {
       await mockLocationService.loadRoute();
@@ -151,6 +172,10 @@ class DrivingAssistantManager extends ChangeNotifier {
     final started = await realLocationService.startTracking();
     if (started) {
       _mode = DriveMode.realGps;
+      await tripRecorderService.startRecording(
+        recordGpx: settingsService.recordGpx,
+        recordLog: settingsService.recordAlertLogs,
+      );
       _locationSubscription = realLocationService.locationStream.listen(_onNewRoadPoint);
       notifyListeners();
       return true;
@@ -167,6 +192,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     _locationSubscription = null;
     mockLocationService.stopSimulation();
     await realLocationService.stopTracking();
+    await tripRecorderService.stopRecording();
     await ttsService.stop();
     _currentPoint = null;
     _firstRealPointAnnounced = false;
@@ -178,7 +204,16 @@ class DrivingAssistantManager extends ChangeNotifier {
   void _onNewRoadPoint(RoadPoint point) {
     _currentPoint = point;
 
-    final events = stateMachine.processRoadPoint(point);
+    // Record the point for GPX
+    if (_mode == DriveMode.realGps) {
+      tripRecorderService.recordPoint(point);
+    }
+
+    final events = stateMachine.processRoadPoint(
+      point,
+      speedTolerance: settingsService.speedTolerance,
+      speedWarningInterval: settingsService.speedWarningInterval,
+    );
 
     // Announce initial street and limit when acquiring the first real GPS fix
     if (_mode == DriveMode.realGps && !_firstRealPointAnnounced && !_isMuted) {
@@ -194,8 +229,15 @@ class DrivingAssistantManager extends ChangeNotifier {
 
     for (final event in events) {
       _alertHistory.insert(0, event);
+      if (_mode == DriveMode.realGps) {
+        tripRecorderService.recordAlert(event);
+      }
       if (!_isMuted) {
-        ttsService.speak(event.spokenText);
+        if (event.type == VoiceAlertType.speedingWarning && settingsService.speedingBeepOnly) {
+          _audioPlayer.play(AssetSource('beep.wav'));
+        } else {
+          ttsService.speak(event.spokenText);
+        }
       }
     }
 

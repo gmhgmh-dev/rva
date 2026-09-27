@@ -23,6 +23,9 @@ enum VoiceAlertType {
 
   /// Trigger 8: Speed limit restored to normal (e.g. 50 km/h) after an isolated reduced speed section (not a zone)
   speedRestored,
+
+  /// Trigger 9: Vehicle exceeds speed limit + tolerance
+  speedingWarning,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

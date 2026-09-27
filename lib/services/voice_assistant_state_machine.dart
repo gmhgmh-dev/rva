@@ -23,8 +23,8 @@ class VoiceAssistantStateMachine {
   bool _isInLivingStreetZone;
   bool _isIn30SpeedZone;
   String? _currentStreetName;
-  final bool announceStreetChanges;
-  final bool useDynamicPhrases;
+  bool announceStreetChanges;
+  bool useDynamicPhrases;
 
   VoiceAssistantStateMachine({
     int? initialMaxSpeed = 50,
@@ -96,8 +96,11 @@ class VoiceAssistantStateMachine {
     return 'Iebraucāt $speedLimit kilometru stundā ātruma ierobežojuma zonā.';
   }
 
+  bool _isSpeeding = false;
+  DateTime? _lastSpeedingWarningTime;
+
   /// Processes a new [RoadPoint] update and returns a list of triggered voice alert events.
-  List<VoiceAlertEvent> processRoadPoint(RoadPoint point) {
+  List<VoiceAlertEvent> processRoadPoint(RoadPoint point, {int speedTolerance = 0, int speedWarningInterval = 10}) {
     return processUpdate(
       newMaxSpeed: point.maxSpeedLimitKmh,
       newIsOneWay: point.isOneWay,
@@ -105,6 +108,9 @@ class VoiceAssistantStateMachine {
       roadClass: point.roadClass,
       isZone: point.isZone,
       timestamp: point.timestamp,
+      vehicleSpeedKmh: point.vehicleSpeedKmh,
+      speedTolerance: speedTolerance,
+      speedWarningInterval: speedWarningInterval,
     );
   }
 
@@ -116,6 +122,9 @@ class VoiceAssistantStateMachine {
     String? roadClass,
     bool isZone = false,
     DateTime? timestamp,
+    double? vehicleSpeedKmh,
+    int speedTolerance = 0,
+    int speedWarningInterval = 10,
   }) {
     final now = timestamp ?? DateTime.now();
     final events = <VoiceAlertEvent>[];
@@ -304,6 +313,35 @@ class VoiceAssistantStateMachine {
         }
       }
       _currentStreetName = normalizedNewStreet;
+    }
+
+    // 5. ĀTRUMA PĀRSNIEGŠANAS BRÄŖDINÄ€JUMS
+    if (effectiveSpeed != null && vehicleSpeedKmh != null) {
+      final speedLimitWithTolerance = effectiveSpeed + speedTolerance;
+      final isCurrentlySpeeding = vehicleSpeedKmh > speedLimitWithTolerance;
+
+      if (isCurrentlySpeeding) {
+        // Tikai brÄ«dinÄm, ja iepriekÅ nebijÄm pÄrsnieguÅi vai ir pagÄjis pietiekami ilgs laiks (piem., 10 sekundes)
+        final canWarnAgain = _lastSpeedingWarningTime == null || 
+            now.difference(_lastSpeedingWarningTime!).inSeconds >= speedWarningInterval;
+            
+        if (!_isSpeeding || canWarnAgain) {
+          _isSpeeding = true;
+          _lastSpeedingWarningTime = now;
+          events.add(
+            VoiceAlertEvent(
+              type: VoiceAlertType.speedingWarning,
+              spokenText: 'Jūs pārsniedzat atļauto ātrumu.', // JÅ«s pÄrsniedzat atÄ¼auto Ätrumu.',
+              timestamp: now,
+              speedLimitKmh: effectiveSpeed,
+              isOneWay: _isOneWay,
+              streetName: streetName,
+            ),
+          );
+        }
+      } else {
+        _isSpeeding = false;
+      }
     }
 
     return events;
