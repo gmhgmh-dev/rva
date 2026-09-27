@@ -349,53 +349,70 @@ class RealLocationService {
 
             if (candidates.isEmpty) return null;
 
-            // 1. Separate named thoroughfares from unnamed service/driveways
-            final namedCandidates = candidates.where((c) {
-              final n = c.attributes.name;
-              return n != null &&
-                  n.isNotEmpty &&
-                  n != 'Pilsētas ceļš' &&
-                  n != 'Pagalma brauktuve' &&
-                  n != 'Dzīvojamā zona' &&
-                  n != 'Dzīvojamais rajons';
-            }).toList();
+            // 1. Living Street priority: If within 35 meters of a living street (20 km/h),
+            // prioritize this over any distant named roads (e.g. courtyards / dzīvojamā zona)!
+            _OsmCandidate? livingCandidate;
+            for (final cand in candidates) {
+              if (cand.distanceMeters <= 35.0) {
+                final hw = cand.element['tags']?['highway']?.toString().toLowerCase();
+                final rc = cand.attributes.roadClass?.toLowerCase();
+                final nm = cand.attributes.name?.toLowerCase();
+                if (hw == 'living_street' ||
+                    rc == 'living_street' ||
+                    nm == 'dzīvojamā zona' ||
+                    cand.attributes.maxspeed == 20) {
+                  livingCandidate = cand;
+                  break;
+                }
+              }
+            }
 
             _OsmCandidate? bestCandidate;
 
-            if (namedCandidates.isNotEmpty) {
-              // Safety Priority on named roads:
-              // If any named road within 75m has an active reduced speed limit (< 50 km/h, e.g. 30 km/h zone),
-              // prioritize this reduced speed segment!
-              for (final cand in namedCandidates) {
-                if (cand.distanceMeters <= 75.0 &&
-                    cand.attributes.maxspeed != null &&
-                    cand.attributes.maxspeed! < 50) {
-                  bestCandidate = cand;
-                  break;
-                }
-              }
-
-              // Otherwise pick the closest named road
-              if (bestCandidate == null) {
-                namedCandidates.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-                bestCandidate = namedCandidates.first;
-              }
+            if (livingCandidate != null) {
+              bestCandidate = livingCandidate;
             } else {
-              // No named road candidates: check if any drivable way has reduced speed
-              for (final cand in candidates) {
-                if (cand.distanceMeters <= 70.0 &&
-                    cand.attributes.maxspeed != null &&
-                    cand.attributes.maxspeed! < 50) {
-                  bestCandidate = cand;
-                  break;
+              // 2. Separate named thoroughfares from unnamed service/driveways
+              final namedCandidates = candidates.where((c) {
+                final n = c.attributes.name;
+                return n != null &&
+                    n.isNotEmpty &&
+                    n != 'Pilsētas ceļš' &&
+                    n != 'Pagalma brauktuve' &&
+                    n != 'Dzīvojamā zona' &&
+                    n != 'Dzīvojamais rajons';
+              }).toList();
+
+              // Check if the absolute closest candidate is a courtyard driveway very close (<= 15m),
+              // while the nearest named road is further than 30m.
+              candidates.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+              final absoluteClosest = candidates.first;
+
+              namedCandidates.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+              final closestNamed = namedCandidates.isNotEmpty ? namedCandidates.first : null;
+
+              if (absoluteClosest.distanceMeters <= 15.0 &&
+                  (closestNamed == null || closestNamed.distanceMeters > 30.0)) {
+                bestCandidate = absoluteClosest;
+              } else if (namedCandidates.isNotEmpty) {
+                // Safety Priority on named roads:
+                // If any named road within 75m has an active reduced speed limit (< 50 km/h),
+                // prioritize this reduced speed segment!
+                for (final cand in namedCandidates) {
+                  if (cand.distanceMeters <= 75.0 &&
+                      cand.attributes.maxspeed != null &&
+                      cand.attributes.maxspeed! < 50) {
+                    bestCandidate = cand;
+                    break;
+                  }
                 }
-              }
-              // Fallback to absolute closest candidate
-              if (bestCandidate == null) {
-                candidates.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-                bestCandidate = candidates.first;
+                bestCandidate ??= closestNamed;
+              } else {
+                bestCandidate = absoluteClosest;
               }
             }
+
+            if (bestCandidate == null) return null;
 
             final chosenAttrs = bestCandidate.attributes;
             final resolvedLimit = resolveSpeedLimit(
@@ -504,10 +521,9 @@ class RealLocationService {
     return distance < 30.0 && isRecent;
   }
 
+  /// Returns true only if coordinates are inside an actual 30 km/h speed zone (Ceļa zīme 521, e.g. Ventspils Old Town).
+  /// Sarkanmuižas dambis has an isolated 30 km/h section (Ceļa zīme 323), NOT an area-wide zone.
   static bool isInsideReducedSpeedZone(double lat, double lon) {
-    if (lat >= 57.3912 && lat <= 57.3936 && lon >= 21.5690 && lon <= 21.5780) {
-      return true;
-    }
     if (lat >= 57.3905 && lat <= 57.3980 && lon >= 21.5510 && lon <= 21.5630) {
       return true;
     }

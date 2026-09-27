@@ -20,6 +20,9 @@ enum VoiceAlertType {
 
   /// Trigger 7: Vehicle enters a 30 km/h speed limit zone
   speed30ZoneEntered,
+
+  /// Trigger 8: Speed limit restored to normal (e.g. 50 km/h) after an isolated reduced speed section (not a zone)
+  speedRestored,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

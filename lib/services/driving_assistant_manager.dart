@@ -39,7 +39,11 @@ class DrivingAssistantManager extends ChangeNotifier {
     PMTilesService? pmTilesService,
     MapDownloaderService? mapDownloaderService,
   }) : this._internal(
-          stateMachine: stateMachine ?? VoiceAssistantStateMachine(),
+          stateMachine: stateMachine ??
+              VoiceAssistantStateMachine(
+                announceStreetChanges: true,
+                useDynamicPhrases: true,
+              ),
           mockLocationService: mockLocationService ?? MockLocationService(),
           ttsService: ttsService ?? TtsService(),
           pmTilesService: pmTilesService ?? PMTilesService(),
@@ -134,12 +138,15 @@ class DrivingAssistantManager extends ChangeNotifier {
     mockLocationService.nextStep();
   }
 
+  bool _firstRealPointAnnounced = false;
+
   /// Starts tracking using the device's real GPS sensors.
   Future<bool> startRealGps() async {
     await stop();
     _currentPoint = null;
     stateMachine.reset();
     _alertHistory.clear();
+    _firstRealPointAnnounced = false;
 
     final started = await realLocationService.startTracking();
     if (started) {
@@ -162,6 +169,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     await realLocationService.stopTracking();
     await ttsService.stop();
     _currentPoint = null;
+    _firstRealPointAnnounced = false;
     _mode = DriveMode.idle;
     notifyListeners();
   }
@@ -171,6 +179,19 @@ class DrivingAssistantManager extends ChangeNotifier {
     _currentPoint = point;
 
     final events = stateMachine.processRoadPoint(point);
+
+    // Announce initial street and limit when acquiring the first real GPS fix
+    if (_mode == DriveMode.realGps && !_firstRealPointAnnounced && !_isMuted) {
+      _firstRealPointAnnounced = true;
+      if (events.isEmpty) {
+        final text = VoiceAssistantStateMachine.formatStreetAnnouncement(
+          streetName: point.streetName,
+          maxSpeed: point.maxSpeedLimitKmh,
+        );
+        ttsService.speak(text);
+      }
+    }
+
     for (final event in events) {
       _alertHistory.insert(0, event);
       if (!_isMuted) {

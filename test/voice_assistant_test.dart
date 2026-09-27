@@ -297,5 +297,56 @@ void main() {
       expect(stateMachine.isIn30SpeedZone, isFalse);
       expect(stateMachine.currentMaxSpeed, equals(50));
     });
+
+    test('Single 30 km/h section (isZone == false) in dynamic mode announces street & limit on entry and speedRestored on exit', () {
+      final dynamicStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Sarkanmuižas dambis',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+      );
+
+      // Enter isolated 30 km/h segment (ceļa zīme 323, isZone = false)
+      final entryEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3925,
+          longitude: 21.5730,
+          vehicleSpeedKmh: 28,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Sarkanmuižas dambis',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(entryEvents.length, equals(1));
+      expect(entryEvents.first.type, equals(VoiceAlertType.speedReduced));
+      expect(entryEvents.first.spokenText, equals('Atrodaties uz Sarkanmuižas dambis. Atļautais ātrums 30 kilometri stundā.'));
+      expect(dynamicStateMachine.isIn30SpeedZone, isFalse);
+      expect(dynamicStateMachine.isInReducedSpeedZone, isTrue);
+
+      // Exit isolated 30 km/h segment back to 50 km/h (speedRestored, NOT speedZoneEnded)
+      final exitEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3936,
+          longitude: 21.5695,
+          vehicleSpeedKmh: 45,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Sarkanmuižas dambis',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(exitEvents.length, equals(1));
+      expect(exitEvents.first.type, equals(VoiceAlertType.speedRestored));
+      expect(exitEvents.first.spokenText, equals('Atrodaties uz Sarkanmuižas dambis. Atļautais ātrums 50 kilometri stundā.'));
+      expect(dynamicStateMachine.isIn30SpeedZone, isFalse);
+      expect(dynamicStateMachine.isInReducedSpeedZone, isFalse);
+      expect(dynamicStateMachine.currentMaxSpeed, equals(50));
+    });
   });
 }

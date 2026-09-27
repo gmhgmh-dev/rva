@@ -68,10 +68,10 @@ void main() {
     expect(find.text('30 KM/H ZONA'), findsOneWidget);
     expect(find.text('Kuldīgas iela'), findsOneWidget);
 
-    // Verify Latvian voice announcement was spoken for Trigger 1
+    // Verify Latvian voice announcement was spoken for dynamic street & speed limit announcement
     expect(
       fakeTts.spokenTexts,
-      contains('Samazināts ātruma ierobežojums: 30 kilometri stundā.'),
+      contains('Atrodaties uz Kuldīgas iela. Atļautais ātrums 30 kilometri stundā.'),
     );
 
     // Step to Index 3 (Kuldīgas iela 2)

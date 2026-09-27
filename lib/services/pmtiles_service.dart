@@ -100,6 +100,10 @@ class PMTilesService {
       VectorTileFeature? closestNamedFeature;
       int extentNamed = 4096;
 
+      double minLivingDistanceSq = double.infinity;
+      VectorTileFeature? closestLivingFeature;
+      int extentLiving = 4096;
+
       for (final layer in roadLayers) {
         final extent = layer.extent > 0 ? layer.extent : 4096;
         final px = (tileXDouble - tileX) * extent;
@@ -137,8 +141,19 @@ class PMTilesService {
             extentAny = extent;
           }
 
-          // Check if this feature has an explicit street name
           final props = feature.decodeProperties();
+
+          // Check if this feature is a living street (20 km/h)
+          final roadClass = props['class']?.value.toString().toLowerCase() ??
+              props['highway']?.value.toString().toLowerCase();
+          final isLiving = roadClass == 'living_street';
+          if (isLiving && featureMinDistSq < minLivingDistanceSq) {
+            minLivingDistanceSq = featureMinDistSq;
+            closestLivingFeature = feature;
+            extentLiving = extent;
+          }
+
+          // Check if this feature has an explicit street name
           final hasName = props.containsKey('name') ||
               props.containsKey('name:latin') ||
               props.containsKey('name:lv') ||
@@ -153,30 +168,51 @@ class PMTilesService {
         }
       }
 
-      if (closestAnyFeature == null && closestNamedFeature == null) {
+      if (closestAnyFeature == null && closestNamedFeature == null && closestLivingFeature == null) {
         return null;
       }
 
-      // Check if closest named feature is within maxRadiusMeters
-      if (closestNamedFeature != null && minNamedDistanceSq != double.infinity) {
-        final metersPerPixelNamed = (cos(rad) * 40075016.686) / (n * extentNamed);
-        final distNamedMeters = sqrt(minNamedDistanceSq) * metersPerPixelNamed;
+      // 1. High Priority: If within 35 meters of a living street (20 km/h), prioritize it!
+      if (closestLivingFeature != null && minLivingDistanceSq != double.infinity) {
+        final metersPerPixelLiving = (cos(rad) * 40075016.686) / (n * extentLiving);
+        final distLivingMeters = sqrt(minLivingDistanceSq) * metersPerPixelLiving;
 
-        if (distNamedMeters <= maxRadiusMeters) {
-          final props = closestNamedFeature.decodeProperties();
-          return _extractRoadAttributes(props, distNamedMeters);
+        if (distLivingMeters <= 35.0) {
+          final props = closestLivingFeature.decodeProperties();
+          return _extractRoadAttributes(props, distLivingMeters);
         }
       }
 
-      // Fallback to closest any feature
+      // Calculate distances for named and any features
+      double distNamedMeters = double.infinity;
+      if (closestNamedFeature != null && minNamedDistanceSq != double.infinity) {
+        final metersPerPixelNamed = (cos(rad) * 40075016.686) / (n * extentNamed);
+        distNamedMeters = sqrt(minNamedDistanceSq) * metersPerPixelNamed;
+      }
+
+      double distAnyMeters = double.infinity;
       if (closestAnyFeature != null && minAnyDistanceSq != double.infinity) {
         final metersPerPixelAny = (cos(rad) * 40075016.686) / (n * extentAny);
-        final distAnyMeters = sqrt(minAnyDistanceSq) * metersPerPixelAny;
+        distAnyMeters = sqrt(minAnyDistanceSq) * metersPerPixelAny;
+      }
 
-        if (distAnyMeters <= maxRadiusMeters) {
-          final props = closestAnyFeature.decodeProperties();
-          return _extractRoadAttributes(props, distAnyMeters);
-        }
+      // 2. If the vehicle is very close (<= 15m) to a courtyard driveway or residential way,
+      // and the closest named road is significantly further away (> 30m), stay on the courtyard/service way.
+      if (distAnyMeters <= 15.0 && distNamedMeters > 30.0 && closestAnyFeature != null) {
+        final props = closestAnyFeature.decodeProperties();
+        return _extractRoadAttributes(props, distAnyMeters);
+      }
+
+      // 3. Otherwise, check if closest named feature is within maxRadiusMeters
+      if (distNamedMeters <= maxRadiusMeters && closestNamedFeature != null) {
+        final props = closestNamedFeature.decodeProperties();
+        return _extractRoadAttributes(props, distNamedMeters);
+      }
+
+      // 4. Fallback to closest any feature
+      if (distAnyMeters <= maxRadiusMeters && closestAnyFeature != null) {
+        final props = closestAnyFeature.decodeProperties();
+        return _extractRoadAttributes(props, distAnyMeters);
       }
 
       return null;

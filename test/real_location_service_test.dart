@@ -393,6 +393,85 @@ void main() {
 
       expect(point.streetName, equals('Rīgas iela'));
       expect(point.maxSpeedLimitKmh, equals(30));
+      expect(point.isZone, isTrue, reason: 'Katoļu / Rīgas iela old town area is a true 30 km/h zone');
+    });
+
+    test('Prioritizes living street in courtyard over distant named street', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              // Living street in courtyard (8 meters away)
+              {
+                'type': 'way',
+                'id': 1001,
+                'center': {'lat': 57.39345, 'lon': 21.57105},
+                'tags': {
+                  'highway': 'living_street',
+                }
+              },
+              // Sarkanmuižas dambis thoroughfare (45 meters away)
+              {
+                'type': 'way',
+                'id': 1002,
+                'center': {'lat': 57.39380, 'lon': 21.57100},
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Sarkanmuižas dambis',
+                  'maxspeed': '50',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      final point = await service.resolveRoadMetadata(_createPosition(57.39340, 21.57100));
+
+      expect(point.streetName, equals('Dzīvojamā zona'));
+      expect(point.maxSpeedLimitKmh, equals(20));
+      expect(point.roadClass, equals('living_street'));
+    });
+
+    test('Sarkanmuižas dambis 30 section has isZone == false', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(json.encode({
+            'elements': [
+              {
+                'type': 'way',
+                'id': 32719335,
+                'center': {'lat': 57.3925, 'lon': 21.5730},
+                'tags': {
+                  'highway': 'tertiary',
+                  'name': 'Sarkanmuižas dambis',
+                  'maxspeed': '30',
+                }
+              }
+            ]
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RealLocationService(
+        pmTilesService: null,
+        httpClient: mockClient,
+      );
+
+      final point = await service.resolveRoadMetadata(_createPosition(57.3926, 21.5728));
+
+      expect(point.streetName, equals('Sarkanmuižas dambis'));
+      expect(point.maxSpeedLimitKmh, equals(30));
+      expect(point.isZone, isFalse, reason: 'Sarkanmuižas dambis is a single 30 posms (ceļa zīme 323), NOT an area zone');
     });
   });
 }

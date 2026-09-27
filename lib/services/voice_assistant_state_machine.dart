@@ -148,6 +148,20 @@ class VoiceAssistantStateMachine {
     } else if (_isInLivingStreetZone) {
       // Exited living street zone
       _isInLivingStreetZone = false;
+      if (effectiveSpeed != null && effectiveSpeed >= 50) {
+        _isInReducedSpeedZone = false;
+        _currentMaxSpeed = effectiveSpeed;
+        events.add(
+          VoiceAlertEvent(
+            type: VoiceAlertType.speedZoneEnded,
+            spokenText: 'Atruma ierobežojuma zona ir beigusies.',
+            timestamp: now,
+            speedLimitKmh: effectiveSpeed,
+            isOneWay: _isOneWay,
+            streetName: streetName,
+          ),
+        );
+      }
     }
 
     // 2. ĀTRUMA IEROBEŽOJUMA STĀVOKLIS
@@ -160,7 +174,7 @@ class VoiceAssistantStateMachine {
           _isInReducedSpeedZone = true;
           _currentMaxSpeed = effectiveSpeed;
 
-          // Check if entering 30 km/h speed zone (Ceļa zīme "30 ZONA")
+          // Check if entering 30 km/h speed zone (Ceļa zīme 521 "30 ZONA")
           if (isZone && effectiveSpeed == 30) {
             _isIn30SpeedZone = true;
             events.add(
@@ -174,6 +188,7 @@ class VoiceAssistantStateMachine {
               ),
             );
           } else {
+            _isIn30SpeedZone = false;
             final spoken = useDynamicPhrases
                 ? formatStreetAnnouncement(streetName: streetName, maxSpeed: effectiveSpeed)
                 : 'Samazināts ātruma ierobežojums: $effectiveSpeed kilometri stundā.';
@@ -191,21 +206,39 @@ class VoiceAssistantStateMachine {
         }
       } else {
         // effectiveSpeed >= 50
-        // TRIGERIS 2: Ja atļautais ātrums atkal atgriežas uz 50 km/h vai vairāk (izbraucot no zonām)
+        // TRIGERIS 2: Ja atļautais ātrums atkal atgriežas uz 50 km/h vai vairāk
         if (_isInReducedSpeedZone || _isIn30SpeedZone) {
+          final wasInActualZone = _isIn30SpeedZone;
           _isInReducedSpeedZone = false;
           _isIn30SpeedZone = false;
           _currentMaxSpeed = effectiveSpeed;
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.speedZoneEnded,
-              spokenText: 'Atruma ierobežojuma zona ir beigusies.',
-              timestamp: now,
-              speedLimitKmh: effectiveSpeed,
-              isOneWay: _isOneWay,
-              streetName: streetName,
-            ),
-          );
+
+          if (wasInActualZone || !useDynamicPhrases) {
+            // Zonas beigas (Ceļa zīme 522 "Zonas beigas") vai klasiskais Trigeris 2
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.speedZoneEnded,
+                spokenText: 'Atruma ierobežojuma zona ir beigusies.',
+                timestamp: now,
+                speedLimitKmh: effectiveSpeed,
+                isOneWay: _isOneWay,
+                streetName: streetName,
+              ),
+            );
+          } else {
+            // Parasta ielas posma beigas dinamiskajā režīmā (atgriežas 50 km/h uz ielas, nevis zonas beigas)
+            final spoken = formatStreetAnnouncement(streetName: streetName, maxSpeed: effectiveSpeed);
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.speedRestored,
+                spokenText: spoken,
+                timestamp: now,
+                speedLimitKmh: effectiveSpeed,
+                isOneWay: _isOneWay,
+                streetName: streetName,
+              ),
+            );
+          }
         } else {
           _currentMaxSpeed = effectiveSpeed;
         }
@@ -248,19 +281,27 @@ class VoiceAssistantStateMachine {
       final normalizedNewStreet = streetName.trim();
       final isChanged = _currentStreetName != null && _currentStreetName != normalizedNewStreet;
       if (isChanged && announceStreetChanges) {
-        events.add(
-          VoiceAlertEvent(
-            type: VoiceAlertType.streetChanged,
-            spokenText: formatStreetAnnouncement(
+        final alreadyHasAlert = events.any((e) =>
+            e.type == VoiceAlertType.speed30ZoneEntered ||
+            e.type == VoiceAlertType.livingStreetEntered ||
+            e.type == VoiceAlertType.speedReduced ||
+            e.type == VoiceAlertType.speedRestored);
+
+        if (!alreadyHasAlert) {
+          events.add(
+            VoiceAlertEvent(
+              type: VoiceAlertType.streetChanged,
+              spokenText: formatStreetAnnouncement(
+                streetName: normalizedNewStreet,
+                maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+              ),
+              timestamp: now,
+              speedLimitKmh: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+              isOneWay: _isOneWay,
               streetName: normalizedNewStreet,
-              maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
             ),
-            timestamp: now,
-            speedLimitKmh: effectiveSpeed ?? _currentMaxSpeed ?? 50,
-            isOneWay: _isOneWay,
-            streetName: normalizedNewStreet,
-          ),
-        );
+          );
+        }
       }
       _currentStreetName = normalizedNewStreet;
     }

@@ -8,10 +8,16 @@ Formāts balstīts uz [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) u
 
 ## [0.2.0] - Izstrādē (In Progress)
 
-### Plānotie uzlabojumi
+### Pievienots / Uzlabots (Added / Improved)
 - [x] Dinamiska ielas nosaukuma paziņošana pirms brīdinājumiem ("Atrodaties uz [Ielas nosaukums]").
-- [x] Dzīvojamo zonu (`highway=living_street` / 20 km/h) atpazīšana un balss brīdinājums.
-- [x] 30 km/h ātruma ierobežojuma zonu atpazīšana un balss brīdinājums ("Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā.").
+- [x] Dzīvojamo zonu (`highway=living_street` / 20 km/h) prioritāra atpazīšana un balss brīdinājums pagalmā esošam auto (nepieļauj tālāku ielu kļūdainu izvēli).
+- [x] 30 km/h zonas (ielu kvartāls / ceļa zīme 521/522) skaidra nošķiršana no parasta ielas posma ar 30 km/h ierobežojumu (ceļa zīme 323).
+  - Zonā: *"Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā"* un *"Ātruma ierobežojuma zona ir beigusies"*.
+  - Parastā posmā: *"Atrodaties uz [Iela]. Atļautais ātrums 30 kilometri stundā"* un *"Atrodaties uz [Iela]. Atļautais ātrums 50 kilometri stundā"*.
+- [x] Sākuma ielas un ātruma paziņošana balsī uzreiz pēc GPS signāla uztveršanas.
+- [x] Automātiska versijas numura pievienošana ģenerētā APK faila nosaukumam (`rva-v0.2.0.apk`).
+
+### Plānotie uzlabojumi
 - [ ] Vairāku valodu atbalsts balss asistentam un saskarnei (EN/LV).
 - [ ] Paplašināta bīstamo satiksmes punktu brīdināšana (dzelzceļa pārbrauktuves, fotoradari, bīstami krustojumi).
 - [ ] Energoefektivitātes optimizācija ilgstošos starppilsētu braucienos.
