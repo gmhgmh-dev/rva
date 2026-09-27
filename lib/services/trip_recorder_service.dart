@@ -59,15 +59,20 @@ class TripRecorderService {
     }
   }
 
+  Future<void> _logWriteQueue = Future.value();
+
   Future<void> recordAlert(VoiceAlertEvent event) async {
     if (!_isRecording || _logFile == null) return;
-    try {
-      final timeStr = DateTime.now().toLocal().toString().split('.').first;
-      final logEntry = '[$timeStr] ${event.type.name.toUpperCase()} -> ${event.spokenText} (Iela: ${event.streetName})\n';
-      await _logFile!.writeAsString(logEntry, mode: FileMode.append);
-    } catch (e) {
-      debugPrint('Failed to record alert log: $e');
-    }
+    _logWriteQueue = _logWriteQueue.then((_) async {
+      try {
+        final timeStr = DateTime.now().toLocal().toString().split('.').first;
+        final logEntry = '[$timeStr] ${event.type.name.toUpperCase()} -> ${event.spokenText} (Iela: ${event.streetName})\n';
+        await _logFile!.writeAsString(logEntry, mode: FileMode.append);
+      } catch (e) {
+        debugPrint('Failed to record alert log: $e');
+      }
+    });
+    await _logWriteQueue;
   }
 
   Future<void> stopRecording() async {

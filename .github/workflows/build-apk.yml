@@ -44,12 +44,12 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           python3 - << 'EOF'
-          import os, base64
+          import os, base64, subprocess
 
           b64 = os.environ.get("KEYSTORE_BASE64", "").strip()
-          key_alias = os.environ.get("KEY_ALIAS", "")
-          key_pwd = os.environ.get("KEY_PASSWORD", "")
-          store_pwd = os.environ.get("STORE_PASSWORD", "")
+          key_alias = os.environ.get("KEY_ALIAS", "").strip()
+          key_pwd = os.environ.get("KEY_PASSWORD", "").strip()
+          store_pwd = os.environ.get("STORE_PASSWORD", "").strip()
 
           if b64:
               print("Decoding keystore...")
@@ -57,10 +57,27 @@ jobs:
               with open("android/app/upload-keystore.jks", "wb") as f:
                   f.write(raw_bytes)
               
+              detected_alias = None
+              try:
+                  res = subprocess.run(
+                      ["keytool", "-list", "-keystore", "android/app/upload-keystore.jks", "-storepass", store_pwd],
+                      capture_output=True, text=True
+                  )
+                  for line in res.stdout.splitlines():
+                      if "PrivateKeyEntry" in line:
+                          detected_alias = line.split(",")[0].strip()
+                          print(f"Detected key alias from keystore: '{detected_alias}'")
+                          break
+              except Exception as e:
+                  print("Keytool inspection notice:", e)
+
+              final_alias = detected_alias or key_alias
+              print(f"Using key alias: '{final_alias}'")
+
               with open("android/key.properties", "w", encoding="utf-8") as f:
                   f.write(f"storePassword={store_pwd}\n")
                   f.write(f"keyPassword={key_pwd}\n")
-                  f.write(f"keyAlias={key_alias}\n")
+                  f.write(f"keyAlias={final_alias}\n")
                   f.write("storeFile=upload-keystore.jks\n")
               
               print(f"Keystore successfully configured ({len(raw_bytes)} bytes).")
