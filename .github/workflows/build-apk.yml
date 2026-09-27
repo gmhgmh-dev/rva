@@ -43,14 +43,30 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Keystore secret found, configuring signing..."
-            echo "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > android/app/upload-keystore.jks
-            printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n" "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
-            echo "Keystore configured successfully."
-          else
-            echo "Keystore secret not found, building debug/unsigned..."
-          fi
+          python3 - << 'EOF'
+          import os, base64
+
+          b64 = os.environ.get("KEYSTORE_BASE64", "").strip()
+          key_alias = os.environ.get("KEY_ALIAS", "")
+          key_pwd = os.environ.get("KEY_PASSWORD", "")
+          store_pwd = os.environ.get("STORE_PASSWORD", "")
+
+          if b64:
+              print("Decoding keystore...")
+              raw_bytes = base64.b64decode(b64)
+              with open("android/app/upload-keystore.jks", "wb") as f:
+                  f.write(raw_bytes)
+              
+              with open("android/key.properties", "w", encoding="utf-8") as f:
+                  f.write(f"storePassword={store_pwd}\n")
+                  f.write(f"keyPassword={key_pwd}\n")
+                  f.write(f"keyAlias={key_alias}\n")
+                  f.write("storeFile=upload-keystore.jks\n")
+              
+              print(f"Keystore successfully configured ({len(raw_bytes)} bytes).")
+          else:
+              print("Keystore secret not found, building debug/unsigned...")
+          EOF
 
       - name: Build APK
         run: flutter build apk --release
