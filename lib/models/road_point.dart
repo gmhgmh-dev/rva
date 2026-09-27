@@ -10,6 +10,7 @@ class RoadPoint {
   final DateTime timestamp;
   final String dataSource;
   final String? roadClass;
+  final bool isZone;
 
   const RoadPoint({
     required this.latitude,
@@ -21,6 +22,7 @@ class RoadPoint {
     required this.timestamp,
     this.dataSource = 'Demo simulācija',
     this.roadClass,
+    this.isZone = false,
   });
 
   RoadPoint copyWith({
@@ -33,6 +35,7 @@ class RoadPoint {
     DateTime? timestamp,
     String? dataSource,
     String? roadClass,
+    bool? isZone,
   }) {
     return RoadPoint(
       latitude: latitude ?? this.latitude,
@@ -44,6 +47,7 @@ class RoadPoint {
       timestamp: timestamp ?? this.timestamp,
       dataSource: dataSource ?? this.dataSource,
       roadClass: roadClass ?? this.roadClass,
+      isZone: isZone ?? this.isZone,
     );
   }
 

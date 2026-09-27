@@ -183,5 +183,119 @@ void main() {
       );
       expect(dynamicStateMachine.currentStreetName, equals('Lielais prospekts'));
     });
+
+    test('formatSpeedZoneAnnouncement returns exact Latvian phrase for 30 km/h zone', () {
+      final text = VoiceAssistantStateMachine.formatSpeedZoneAnnouncement(30);
+      expect(text, equals('Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā.'));
+    });
+
+    test('Entering 30 km/h speed zone triggers VoiceAlertType.speed30ZoneEntered', () {
+      final events = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 28,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Katoļu iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(events.length, equals(1));
+      final alert = events.first;
+      expect(alert.type, equals(VoiceAlertType.speed30ZoneEntered));
+      expect(alert.spokenText, equals('Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā.'));
+      expect(alert.speedLimitKmh, equals(30));
+      expect(stateMachine.isIn30SpeedZone, isTrue);
+      expect(stateMachine.isInReducedSpeedZone, isTrue);
+      expect(stateMachine.currentMaxSpeed, equals(30));
+    });
+
+    test('Subsequent points inside 30 km/h zone DO NOT repeat the voice alert (debounce/threshold)', () {
+      // 1. First point entering 30 km/h zone
+      final firstEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3951,
+          longitude: 21.5651,
+          vehicleSpeedKmh: 26,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Katoļu iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(firstEvents.length, equals(1));
+      expect(firstEvents.first.type, equals(VoiceAlertType.speed30ZoneEntered));
+
+      // 2. Second point inside 30 km/h zone
+      final secondEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3953,
+          longitude: 21.5653,
+          vehicleSpeedKmh: 27,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Katoļu iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(secondEvents, isEmpty, reason: '30 zone alert must not repeat while remaining in the zone');
+
+      // 3. Third point turning into another street inside the same 30 zone
+      final thirdEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3956,
+          longitude: 21.5656,
+          vehicleSpeedKmh: 25,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Rīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(thirdEvents, isEmpty, reason: 'Continuing in 30 zone must stay silent without re-alerting');
+    });
+
+    test('Exiting 30 km/h zone back to urban road (50 km/h) triggers speedZoneEnded', () {
+      // Enter 30 zone
+      stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3951,
+          longitude: 21.5651,
+          vehicleSpeedKmh: 25,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Katoļu iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(stateMachine.isIn30SpeedZone, isTrue);
+
+      // Exit 30 zone
+      final exitEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3970,
+          longitude: 21.5680,
+          vehicleSpeedKmh: 45,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(exitEvents.length, equals(1));
+      expect(exitEvents.first.type, equals(VoiceAlertType.speedZoneEnded));
+      expect(exitEvents.first.spokenText, equals('Atruma ierobežojuma zona ir beigusies.'));
+      expect(stateMachine.isIn30SpeedZone, isFalse);
+      expect(stateMachine.currentMaxSpeed, equals(50));
+    });
   });
 }

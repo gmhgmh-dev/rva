@@ -17,6 +17,9 @@ enum VoiceAlertType {
 
   /// Trigger 6: Dynamic street name / speed limit announcement
   streetChanged,
+
+  /// Trigger 7: Vehicle enters a 30 km/h speed limit zone
+  speed30ZoneEntered,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

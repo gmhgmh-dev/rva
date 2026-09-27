@@ -472,11 +472,18 @@ class RealLocationService {
       }
     }
 
+    final isZone = tags['zone:maxspeed'] != null ||
+        tags['zone:traffic'] != null ||
+        (tags['source:maxspeed']?.toString().toLowerCase().contains('zone') ?? false) ||
+        rawMaxspeed == 'LV:zone30' ||
+        rawMaxspeed == 'zone30';
+
     return RoadAttributes(
       maxspeed: maxspeed,
       isOneWay: isOneWay,
       name: name,
       roadClass: highway,
+      isZone: isZone,
     );
   }
 
@@ -592,6 +599,9 @@ class RealLocationService {
       roadClass: attributes.roadClass,
     );
 
+    final isSpeedZone = attributes.isZone ||
+        (effectiveMaxSpeed == 30 && isInsideReducedSpeedZone(lat, lon));
+
     return RoadPoint(
       latitude: lat,
       longitude: lon,
@@ -602,6 +612,7 @@ class RealLocationService {
       timestamp: timestamp ?? DateTime.now(),
       dataSource: dataSource,
       roadClass: attributes.roadClass,
+      isZone: isSpeedZone,
     );
   }
 

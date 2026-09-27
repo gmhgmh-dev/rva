@@ -5,6 +5,7 @@ class RoadAttributes {
   final String? name;
   final double? distanceMeters;
   final String? roadClass;
+  final bool isZone;
 
   const RoadAttributes({
     this.maxspeed,
@@ -12,6 +13,7 @@ class RoadAttributes {
     this.name,
     this.distanceMeters,
     this.roadClass,
+    this.isZone = false,
   });
 
   RoadAttributes copyWith({
@@ -20,6 +22,7 @@ class RoadAttributes {
     String? name,
     double? distanceMeters,
     String? roadClass,
+    bool? isZone,
   }) {
     return RoadAttributes(
       maxspeed: maxspeed ?? this.maxspeed,
@@ -27,6 +30,7 @@ class RoadAttributes {
       name: name ?? this.name,
       distanceMeters: distanceMeters ?? this.distanceMeters,
       roadClass: roadClass ?? this.roadClass,
+      isZone: isZone ?? this.isZone,
     );
   }
 

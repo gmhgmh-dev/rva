@@ -610,6 +610,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         badgeLabel = 'DZĪVOJAMĀ ZONA • 20 km/h';
         alertIcon = Icons.home_rounded;
         break;
+      case VoiceAlertType.speed30ZoneEntered:
+        badgeColor = Colors.orangeAccent;
+        badgeLabel = '30 ZONA • 30 km/h';
+        alertIcon = Icons.traffic_rounded;
+        break;
       case VoiceAlertType.streetChanged:
         badgeColor = Colors.amberAccent;
         badgeLabel = 'IELAS MAIŅA';

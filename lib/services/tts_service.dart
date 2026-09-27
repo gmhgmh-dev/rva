@@ -67,6 +67,18 @@ class TtsService {
     await speak(VoiceAssistantStateMachine.formatLivingStreetAnnouncement());
   }
 
+  /// Speaks speed limit zone entry:
+  /// "Iebraucāt [speedLimit] kilometru stundā ātruma ierobežojuma zonā."
+  Future<void> speakSpeedZone(int speedLimit) async {
+    await speak(VoiceAssistantStateMachine.formatSpeedZoneAnnouncement(speedLimit));
+  }
+
+  /// Speaks 30 km/h speed zone entry:
+  /// "Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā."
+  Future<void> speak30SpeedZone() async {
+    await speak(VoiceAssistantStateMachine.formatSpeedZoneAnnouncement(30));
+  }
+
   Future<void> _processQueue() async {
     if (_speechQueue.isEmpty) {
       _isSpeaking = false;

@@ -65,6 +65,7 @@ class DrivingAssistantManager extends ChangeNotifier {
   bool get isOneWay => stateMachine.isOneWay;
   bool get isInReducedSpeedZone => stateMachine.isInReducedSpeedZone;
   bool get isInLivingStreetZone => stateMachine.isInLivingStreetZone;
+  bool get isIn30SpeedZone => stateMachine.isIn30SpeedZone;
   String? get currentStreetName => stateMachine.currentStreetName;
   bool get isOfflineMapLoaded => pmTilesService.isLoaded;
 

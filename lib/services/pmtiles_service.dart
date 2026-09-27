@@ -281,12 +281,19 @@ class PMTilesService {
       }
     }
 
+    // Detect if road is marked as part of a traffic speed zone
+    final isZone = props['zone:maxspeed'] != null ||
+        props['zone:traffic'] != null ||
+        (props['source:maxspeed']?.value.toString().toLowerCase().contains('zone') ?? false) ||
+        (speedVal?.value.toString().toLowerCase().contains('zone') ?? false);
+
     return RoadAttributes(
       maxspeed: maxspeed,
       isOneWay: isOneWay,
       name: name,
       distanceMeters: distanceMeters,
       roadClass: roadClass,
+      isZone: isZone,
     );
   }
 

@@ -68,6 +68,21 @@ void main() {
       expect(road.maxspeed, equals(20));
       expect(road.name, equals('Ziedu iela'));
       expect(road.roadClass, equals('residential'));
+      expect(road.isZone, isTrue);
+    });
+
+    test('extractRoadAttributes sets isZone=true when zone:maxspeed=30 is present', () {
+      final service = PMTilesService();
+      final props = <String, VectorTileValue>{
+        'highway': VectorTileValue(stringValue: 'residential'),
+        'zone:maxspeed': VectorTileValue(stringValue: '30'),
+        'name': VectorTileValue(stringValue: 'Katoļu iela'),
+      };
+
+      final road = service.extractRoadAttributesForTesting(props, 2.0);
+      expect(road.maxspeed, equals(30));
+      expect(road.isZone, isTrue);
+      expect(road.name, equals('Katoļu iela'));
     });
   });
 }

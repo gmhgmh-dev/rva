@@ -9,8 +9,9 @@ Formāts balstīts uz [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) u
 ## [0.2.0] - Izstrādē (In Progress)
 
 ### Plānotie uzlabojumi
-- [ ] Dinamiska ielas nosaukuma paziņošana pirms brīdinājumiem ("Atrodaties uz [Ielas nosaukums]").
-- [ ] Dzīvojamo zonu (`highway=living_street` / 20 km/h) atpazīšana un balss brīdinājums.
+- [x] Dinamiska ielas nosaukuma paziņošana pirms brīdinājumiem ("Atrodaties uz [Ielas nosaukums]").
+- [x] Dzīvojamo zonu (`highway=living_street` / 20 km/h) atpazīšana un balss brīdinājums.
+- [x] 30 km/h ātruma ierobežojuma zonu atpazīšana un balss brīdinājums ("Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā.").
 - [ ] Vairāku valodu atbalsts balss asistentam un saskarnei (EN/LV).
 - [ ] Paplašināta bīstamo satiksmes punktu brīdināšana (dzelzceļa pārbrauktuves, fotoradari, bīstami krustojumi).
 - [ ] Energoefektivitātes optimizācija ilgstošos starppilsētu braucienos.

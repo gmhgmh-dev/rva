@@ -4,8 +4,9 @@ import '../models/voice_alert_event.dart';
 /// State Machine that tracks:
 /// 1. Speed limit state (currentMaxSpeed & isInReducedSpeedZone)
 /// 2. Living street state (isInLivingStreetZone, 20 km/h)
-/// 3. One-way street state (isOneWay)
-/// 4. Current street name tracking and dynamic announcements
+/// 3. 30 km/h speed limit zone state (isIn30SpeedZone, 30 km/h)
+/// 4. One-way street state (isOneWay)
+/// 5. Current street name tracking and dynamic announcements
 ///
 /// Dispatches exact Latvian voice announcement events:
 /// - Trigger 1: "Samazināts ātruma ierobežojums: [X] kilometri stundā." (vai dinamiskā frāze)
@@ -13,12 +14,14 @@ import '../models/voice_alert_event.dart';
 /// - Trigger 3: "Jūs atrodaties uz vienvirziena ielas."
 /// - Trigger 4: "Vienvirziena iela ir beigusies."
 /// - Trigger 5 (Living zone): "Iebraucāt dzīvojamā zonā. Maksimālais ātrums 20 kilometri stundā."
+/// - Trigger 6 (30 zone): "Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā."
 /// - Dynamic street naming: "Atrodaties uz [street_name]. Atļautais ātrums [max_speed] kilometri stundā."
 class VoiceAssistantStateMachine {
   int? _currentMaxSpeed;
   bool _isOneWay;
   bool _isInReducedSpeedZone;
   bool _isInLivingStreetZone;
+  bool _isIn30SpeedZone;
   String? _currentStreetName;
   final bool announceStreetChanges;
   final bool useDynamicPhrases;
@@ -33,12 +36,14 @@ class VoiceAssistantStateMachine {
         _isOneWay = initialIsOneWay,
         _currentStreetName = initialStreetName,
         _isInReducedSpeedZone = (initialMaxSpeed != null && initialMaxSpeed < 50),
-        _isInLivingStreetZone = (initialMaxSpeed == 20);
+        _isInLivingStreetZone = (initialMaxSpeed == 20),
+        _isIn30SpeedZone = (initialMaxSpeed == 30);
 
   int? get currentMaxSpeed => _currentMaxSpeed;
   bool get isOneWay => _isOneWay;
   bool get isInReducedSpeedZone => _isInReducedSpeedZone;
   bool get isInLivingStreetZone => _isInLivingStreetZone;
+  bool get isIn30SpeedZone => _isIn30SpeedZone;
   String? get currentStreetName => _currentStreetName;
 
   /// Resets state machine to initial values (e.g. at the start of a route)
@@ -52,6 +57,7 @@ class VoiceAssistantStateMachine {
     _currentStreetName = initialStreetName;
     _isInReducedSpeedZone = (initialMaxSpeed != null && initialMaxSpeed < 50);
     _isInLivingStreetZone = (initialMaxSpeed == 20);
+    _isIn30SpeedZone = (initialMaxSpeed == 30);
   }
 
   /// Formats dynamic street and speed limit announcement:
@@ -84,6 +90,12 @@ class VoiceAssistantStateMachine {
     return 'Iebraucāt dzīvojamā zonā. Maksimālais ātrums 20 kilometri stundā.';
   }
 
+  /// Formats speed limit zone entry announcement:
+  /// "Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā."
+  static String formatSpeedZoneAnnouncement(int speedLimit) {
+    return 'Iebraucāt $speedLimit kilometru stundā ātruma ierobežojuma zonā.';
+  }
+
   /// Processes a new [RoadPoint] update and returns a list of triggered voice alert events.
   List<VoiceAlertEvent> processRoadPoint(RoadPoint point) {
     return processUpdate(
@@ -91,6 +103,7 @@ class VoiceAssistantStateMachine {
       newIsOneWay: point.isOneWay,
       streetName: point.streetName,
       roadClass: point.roadClass,
+      isZone: point.isZone,
       timestamp: point.timestamp,
     );
   }
@@ -101,6 +114,7 @@ class VoiceAssistantStateMachine {
     required bool? newIsOneWay,
     String? streetName,
     String? roadClass,
+    bool isZone = false,
     DateTime? timestamp,
   }) {
     final now = timestamp ?? DateTime.now();
@@ -118,6 +132,7 @@ class VoiceAssistantStateMachine {
       if (!_isInLivingStreetZone) {
         _isInLivingStreetZone = true;
         _isInReducedSpeedZone = true;
+        _isIn30SpeedZone = false;
         _currentMaxSpeed = 20;
         events.add(
           VoiceAlertEvent(
@@ -144,25 +159,42 @@ class VoiceAssistantStateMachine {
         if (!_isInReducedSpeedZone || isSpeedChanged) {
           _isInReducedSpeedZone = true;
           _currentMaxSpeed = effectiveSpeed;
-          final spoken = useDynamicPhrases
-              ? formatStreetAnnouncement(streetName: streetName, maxSpeed: effectiveSpeed)
-              : 'Samazināts ātruma ierobežojums: $effectiveSpeed kilometri stundā.';
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.speedReduced,
-              spokenText: spoken,
-              timestamp: now,
-              speedLimitKmh: effectiveSpeed,
-              isOneWay: _isOneWay,
-              streetName: streetName,
-            ),
-          );
+
+          // Check if entering 30 km/h speed zone (Ceļa zīme "30 ZONA")
+          if (isZone && effectiveSpeed == 30) {
+            _isIn30SpeedZone = true;
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.speed30ZoneEntered,
+                spokenText: formatSpeedZoneAnnouncement(30),
+                timestamp: now,
+                speedLimitKmh: 30,
+                isOneWay: _isOneWay,
+                streetName: streetName,
+              ),
+            );
+          } else {
+            final spoken = useDynamicPhrases
+                ? formatStreetAnnouncement(streetName: streetName, maxSpeed: effectiveSpeed)
+                : 'Samazināts ātruma ierobežojums: $effectiveSpeed kilometri stundā.';
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.speedReduced,
+                spokenText: spoken,
+                timestamp: now,
+                speedLimitKmh: effectiveSpeed,
+                isOneWay: _isOneWay,
+                streetName: streetName,
+              ),
+            );
+          }
         }
       } else {
         // effectiveSpeed >= 50
         // TRIGERIS 2: Ja atļautais ātrums atkal atgriežas uz 50 km/h vai vairāk (izbraucot no zonām)
-        if (_isInReducedSpeedZone) {
+        if (_isInReducedSpeedZone || _isIn30SpeedZone) {
           _isInReducedSpeedZone = false;
+          _isIn30SpeedZone = false;
           _currentMaxSpeed = effectiveSpeed;
           events.add(
             VoiceAlertEvent(
