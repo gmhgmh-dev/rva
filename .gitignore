@@ -58,3 +58,7 @@ android/local.properties
 # Secrets & Telegram Bridge
 scripts/telegram_bridge.py
 scripts/.telegram_conv_id.json
+
+# Keystore files
+android/key.properties
+android/app/upload-keystore.jks
