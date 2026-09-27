@@ -605,6 +605,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         badgeLabel = 'TRIGERIS 4 • Vienvirziena beigas';
         alertIcon = Icons.swap_vert_rounded;
         break;
+      case VoiceAlertType.livingStreetEntered:
+        badgeColor = Colors.deepOrangeAccent;
+        badgeLabel = 'DZĪVOJAMĀ ZONA • 20 km/h';
+        alertIcon = Icons.home_rounded;
+        break;
+      case VoiceAlertType.streetChanged:
+        badgeColor = Colors.amberAccent;
+        badgeLabel = 'IELAS MAIŅA';
+        alertIcon = Icons.alt_route_rounded;
+        break;
     }
 
     final timeStr =

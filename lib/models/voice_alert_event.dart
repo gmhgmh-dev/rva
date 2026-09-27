@@ -11,6 +11,12 @@ enum VoiceAlertType {
 
   /// Trigger 4: Vehicle exits a one-way street (oneway == false)
   oneWayExited,
+
+  /// Trigger 5: Vehicle enters a living street / residential zone (20 km/h)
+  livingStreetEntered,
+
+  /// Trigger 6: Dynamic street name / speed limit announcement
+  streetChanged,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

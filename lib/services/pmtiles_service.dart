@@ -249,6 +249,11 @@ class PMTilesService {
       roadClass = classVal.value.toString();
     }
 
+    // living_street default speed limit is 20 km/h according to Latvian traffic law
+    if (roadClass?.toLowerCase() == 'living_street') {
+      maxspeed ??= 20;
+    }
+
     // 4. Parse road name
     final nameVal = props['name'] ??
         props['name:latin'] ??
@@ -307,4 +312,14 @@ class PMTilesService {
     final str = value.toString().trim().toLowerCase();
     return str == 'yes' || str == '1' || str == 'true' || str == '-1';
   }
+
+  @visibleForTesting
+  static int? parseIntValue(Object value) => _parseIntValue(value);
+
+  @visibleForTesting
+  RoadAttributes extractRoadAttributesForTesting(
+    Map<String, VectorTileValue> props,
+    double distanceMeters,
+  ) =>
+      _extractRoadAttributes(props, distanceMeters);
 }

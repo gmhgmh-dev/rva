@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'voice_assistant_state_machine.dart';
 
 /// Service responsible for speech synthesis using `flutter_tts` in Latvian ("lv-LV").
 /// Includes safety fallbacks, queued announcements, and a stream for UI display.
@@ -48,6 +49,22 @@ class TtsService {
     if (!_isSpeaking) {
       _processQueue();
     }
+  }
+
+  /// Speaks dynamic street and speed limit announcement:
+  /// "Atrodaties uz [street_name]. Atļautais ātrums [max_speed] kilometri stundā."
+  Future<void> speakStreetInfo(String? streetName, int maxSpeed) async {
+    final text = VoiceAssistantStateMachine.formatStreetAnnouncement(
+      streetName: streetName,
+      maxSpeed: maxSpeed,
+    );
+    await speak(text);
+  }
+
+  /// Speaks living street zone entry:
+  /// "Iebraucāt dzīvojamā zonā. Maksimālais ātrums 20 kilometri stundā."
+  Future<void> speakLivingStreetZone() async {
+    await speak(VoiceAssistantStateMachine.formatLivingStreetAnnouncement());
   }
 
   Future<void> _processQueue() async {

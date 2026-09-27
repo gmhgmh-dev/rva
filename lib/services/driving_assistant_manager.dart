@@ -64,6 +64,8 @@ class DrivingAssistantManager extends ChangeNotifier {
   int? get currentMaxSpeed => stateMachine.currentMaxSpeed;
   bool get isOneWay => stateMachine.isOneWay;
   bool get isInReducedSpeedZone => stateMachine.isInReducedSpeedZone;
+  bool get isInLivingStreetZone => stateMachine.isInLivingStreetZone;
+  String? get currentStreetName => stateMachine.currentStreetName;
   bool get isOfflineMapLoaded => pmTilesService.isLoaded;
 
   Future<void> init({bool loadAsset = true}) async {
@@ -92,6 +94,17 @@ class DrivingAssistantManager extends ChangeNotifier {
   void toggleMute() {
     _isMuted = !_isMuted;
     notifyListeners();
+  }
+
+  /// Announces current street name and speed limit dynamically via TTS.
+  void announceCurrentStreetInfo() {
+    if (_currentPoint != null && !_isMuted) {
+      final text = VoiceAssistantStateMachine.formatStreetAnnouncement(
+        streetName: _currentPoint!.streetName,
+        maxSpeed: _currentPoint!.maxSpeedLimitKmh,
+      );
+      ttsService.speak(text);
+    }
   }
 
   /// Starts the Ventspils Mock Test Route simulation covering all 4 triggers sequentially.

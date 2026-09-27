@@ -9,6 +9,7 @@ class RoadPoint {
   final String streetName;
   final DateTime timestamp;
   final String dataSource;
+  final String? roadClass;
 
   const RoadPoint({
     required this.latitude,
@@ -19,6 +20,7 @@ class RoadPoint {
     required this.streetName,
     required this.timestamp,
     this.dataSource = 'Demo simulācija',
+    this.roadClass,
   });
 
   RoadPoint copyWith({
@@ -30,6 +32,7 @@ class RoadPoint {
     String? streetName,
     DateTime? timestamp,
     String? dataSource,
+    String? roadClass,
   }) {
     return RoadPoint(
       latitude: latitude ?? this.latitude,
@@ -40,6 +43,7 @@ class RoadPoint {
       streetName: streetName ?? this.streetName,
       timestamp: timestamp ?? this.timestamp,
       dataSource: dataSource ?? this.dataSource,
+      roadClass: roadClass ?? this.roadClass,
     );
   }
 

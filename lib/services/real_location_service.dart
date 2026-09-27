@@ -601,6 +601,7 @@ class RealLocationService {
       streetName: street,
       timestamp: timestamp ?? DateTime.now(),
       dataSource: dataSource,
+      roadClass: attributes.roadClass,
     );
   }
 
