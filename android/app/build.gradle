@@ -4,6 +4,35 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def getGitShortHash = { ->
+    try {
+        def stdout = new ByteArrayOutputStream()
+        exec {
+            if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+                commandLine 'cmd', '/c', 'git', 'rev-parse', '--short=7', 'HEAD'
+            } else {
+                commandLine 'git', 'rev-parse', '--short=7', 'HEAD'
+            }
+            standardOutput = stdout
+        }
+        def hash = stdout.toString().trim()
+        return (hash && !hash.isEmpty()) ? hash : "dev"
+    } catch (Exception e) {
+        try {
+            def process = "git rev-parse --short=7 HEAD".execute([], project.rootDir)
+            process.waitFor()
+            def hash = process.text.trim()
+            return (hash && !hash.isEmpty()) ? hash : "dev"
+        } catch (Exception e2) {
+            return "dev"
+        }
+    }
+}
+
+def getBuildTimestamp = { ->
+    return new Date().format('yyyyMMdd-HHmm')
+}
+
 android {
     namespace = "com.ventspils.voiceassistant.ventspils_voice_assistant"
     compileSdk = flutter.compileSdkVersion
@@ -34,14 +63,18 @@ android {
     }
 
     applicationVariants.all { variant ->
+        def baseVersion = variant.versionName
+        def gitHash = getGitShortHash()
+        def timeStamp = getBuildTimestamp()
+        def customApkName = "rva-v${baseVersion}-${timeStamp}-${gitHash}.apk"
+
         variant.outputs.all { output ->
-            def versionName = variant.versionName
-            outputFileName = "rva-v${versionName}.apk"
+            outputFileName = customApkName
         }
         variant.assembleProvider.configure { assembleTask ->
             assembleTask.doLast {
                 copy {
-                    from "${layout.buildDirectory.asFile.get()}/outputs/apk/release/rva-v${variant.versionName}.apk"
+                    from "${layout.buildDirectory.asFile.get()}/outputs/apk/${variant.buildType.name}/${customApkName}"
                     into "${layout.buildDirectory.asFile.get()}/outputs/flutter-apk"
                 }
             }
