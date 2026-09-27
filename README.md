@@ -25,3 +25,10 @@
    ```bash
    flutter run
    ```
+
+## Versiju vēsture
+
+Pilns izmaiņu un versiju saraksts atrodams failā [CHANGELOG.md](CHANGELOG.md).
+- **Jaunākā stabilā versija:** `v0.1.0-stable`
+- **Pašreizējā izstrādes versija:** `v0.2.0`
+
