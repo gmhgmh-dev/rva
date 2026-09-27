@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:xml/xml.dart';
@@ -123,6 +124,20 @@ class MockLocationService {
       }
     } catch (_) {
       // Keep default route
+    }
+  }
+
+  /// Loads the GPX route from a specific File.
+  Future<void> loadRouteFromFile(File file) async {
+    try {
+      final gpxString = await file.readAsString();
+      final parsed = parseGpxString(gpxString);
+      if (parsed.isNotEmpty) {
+        _waypoints.clear();
+        _waypoints.addAll(parsed);
+      }
+    } catch (_) {
+      // Ignore and keep what we have
     }
   }
 

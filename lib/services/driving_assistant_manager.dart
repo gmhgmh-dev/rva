@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/road_point.dart';
@@ -141,6 +142,21 @@ class DrivingAssistantManager extends ChangeNotifier {
     _alertHistory.clear();
     _mode = DriveMode.mockSimulation;
     notifyListeners();
+
+    _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
+    await mockLocationService.startSimulation(interval: interval);
+  }
+
+  /// Starts a simulation from a specific GPX File
+  Future<void> startSimulationFromFile(File file, {Duration interval = const Duration(seconds: 1)}) async {
+    await stop();
+    _currentPoint = null;
+    stateMachine.reset();
+    _alertHistory.clear();
+    _mode = DriveMode.mockSimulation;
+    notifyListeners();
+
+    await mockLocationService.loadRouteFromFile(file);
 
     _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
     await mockLocationService.startSimulation(interval: interval);
