@@ -12,6 +12,8 @@ class SettingsService extends ChangeNotifier {
   static const _keyKeepScreenOn = 'keep_screen_on';
   static const _keyRecordGpx = 'record_gpx';
   static const _keyRecordAlertLogs = 'record_alert_logs';
+  static const _keyRoadSearchRadiusMeters = 'road_search_radius_meters';
+  static const _keyCourtyardSearchRadiusMeters = 'courtyard_search_radius_meters';
 
   bool _useDynamicPhrases = true;
   bool _announceStreetChanges = true;
@@ -23,6 +25,8 @@ class SettingsService extends ChangeNotifier {
   bool _keepScreenOn = false;
   bool _recordGpx = false;
   bool _recordAlertLogs = false;
+  double _roadSearchRadiusMeters = 40.0; // Recommended default 40m
+  double _courtyardSearchRadiusMeters = 15.0; // Recommended default 15m
 
   bool get useDynamicPhrases => _useDynamicPhrases;
   bool get announceStreetChanges => _announceStreetChanges;
@@ -34,6 +38,8 @@ class SettingsService extends ChangeNotifier {
   bool get keepScreenOn => _keepScreenOn;
   bool get recordGpx => _recordGpx;
   bool get recordAlertLogs => _recordAlertLogs;
+  double get roadSearchRadiusMeters => _roadSearchRadiusMeters;
+  double get courtyardSearchRadiusMeters => _courtyardSearchRadiusMeters;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -47,6 +53,8 @@ class SettingsService extends ChangeNotifier {
     _keepScreenOn = prefs.getBool(_keyKeepScreenOn) ?? false;
     _recordGpx = prefs.getBool(_keyRecordGpx) ?? false;
     _recordAlertLogs = prefs.getBool(_keyRecordAlertLogs) ?? false;
+    _roadSearchRadiusMeters = prefs.getDouble(_keyRoadSearchRadiusMeters) ?? 40.0;
+    _courtyardSearchRadiusMeters = prefs.getDouble(_keyCourtyardSearchRadiusMeters) ?? 15.0;
     notifyListeners();
   }
 
@@ -117,6 +125,20 @@ class SettingsService extends ChangeNotifier {
     _recordAlertLogs = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyRecordAlertLogs, value);
+    notifyListeners();
+  }
+
+  Future<void> setRoadSearchRadiusMeters(double value) async {
+    _roadSearchRadiusMeters = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyRoadSearchRadiusMeters, value);
+    notifyListeners();
+  }
+
+  Future<void> setCourtyardSearchRadiusMeters(double value) async {
+    _courtyardSearchRadiusMeters = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyCourtyardSearchRadiusMeters, value);
     notifyListeners();
   }
 }

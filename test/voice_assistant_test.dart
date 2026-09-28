@@ -155,7 +155,7 @@ void main() {
       expect(stateMachine.currentMaxSpeed, equals(50));
     });
 
-    test('Dynamic street change triggers streetChanged event when announceStreetChanges is true', () {
+    test('Dynamic street change triggers streetChanged event after 2 confirmations (anti-spam filter)', () {
       final dynamicStateMachine = VoiceAssistantStateMachine(
         initialMaxSpeed: 50,
         initialIsOneWay: false,
@@ -163,10 +163,25 @@ void main() {
         announceStreetChanges: true,
       );
 
-      final events = dynamicStateMachine.processRoadPoint(
+      // Point 1 on Lielais prospekts - candidate registered, anti-spam prevents premature trigger
+      final firstPointEvents = dynamicStateMachine.processRoadPoint(
         RoadPoint(
           latitude: 57.3970,
           longitude: 21.5680,
+          vehicleSpeedKmh: 48,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(firstPointEvents, isEmpty, reason: 'First point is filtered as potential intersection cross-street');
+
+      // Point 2 on Lielais prospekts - confirmed turn onto new street
+      final events = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3975,
+          longitude: 21.5685,
           vehicleSpeedKmh: 48,
           maxSpeedLimitKmh: 50,
           isOneWay: false,
@@ -182,6 +197,103 @@ void main() {
         equals('Atrodaties uz Lielais prospekts. Atļautais ātrums 50 kilometri stundā.'),
       );
       expect(dynamicStateMachine.currentStreetName, equals('Lielais prospekts'));
+    });
+
+    test('Intersection cross-street spike is filtered out without spamming', () {
+      final dynamicStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+      );
+
+      // Single cross-street glitch at an intersection (e.g. Ganību iela)
+      final crossStreetEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3940,
+          longitude: 21.5610,
+          vehicleSpeedKmh: 45,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(crossStreetEvents, isEmpty, reason: 'Single cross-street spike must not spam voice alerts');
+
+      // Continuing on Kuldīgas iela
+      final continueEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3945,
+          longitude: 21.5600,
+          vehicleSpeedKmh: 45,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(continueEvents, isEmpty);
+      expect(dynamicStateMachine.currentStreetName, equals('Kuldīgas iela'));
+    });
+
+    test('Bicycle and pedestrian path entry triggers voice announcement and tracks state', () {
+      final cycleStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+      );
+
+      // Enter bicycle path
+      final bikeEvents = cycleStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3930,
+          longitude: 21.5630,
+          vehicleSpeedKmh: 18,
+          maxSpeedLimitKmh: 20,
+          isOneWay: false,
+          isCycleway: true,
+          streetName: 'Lielais prospekts veloceliņš',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(bikeEvents.length, equals(1));
+      expect(bikeEvents.first.type, equals(VoiceAlertType.pedestrianOrBicycleWayEntered));
+      expect(bikeEvents.first.spokenText, equals('Atrodaties uz velosipēdu ceļa.'));
+      expect(cycleStateMachine.isInPedestrianOrBicycleWay, isTrue);
+
+      // Subsequent point on bike path does not repeat voice
+      final bikeEvents2 = cycleStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3935,
+          longitude: 21.5625,
+          vehicleSpeedKmh: 19,
+          maxSpeedLimitKmh: 20,
+          isOneWay: false,
+          isCycleway: true,
+          streetName: 'Lielais prospekts veloceliņš',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(bikeEvents2, isEmpty);
+
+      // Enter footway
+      final footEvents = cycleStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3940,
+          longitude: 21.5620,
+          vehicleSpeedKmh: 5,
+          maxSpeedLimitKmh: 20,
+          isOneWay: false,
+          isFootway: true,
+          streetName: 'Gājēju celiņš',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(footEvents.length, equals(1));
+      expect(footEvents.first.type, equals(VoiceAlertType.pedestrianOrBicycleWayEntered));
+      expect(footEvents.first.spokenText, equals('Atrodaties uz gājēju ceļa.'));
     });
 
     test('formatSpeedZoneAnnouncement returns exact Latvian phrase for 30 km/h zone', () {

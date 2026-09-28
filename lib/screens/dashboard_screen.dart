@@ -591,14 +591,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
                         OneWayBadgeWidget(
-
-
                           isOneWay: manager.isOneWay,
-
-
                         ),
-
-
+                        if (manager.isInPedestrianOrBicycleWay)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: manager.isCycleway ? const Color(0xFF1B3B2B) : const Color(0xFF1E2F3E),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: manager.isCycleway ? Colors.greenAccent : Colors.cyanAccent,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  manager.isCycleway ? Icons.directions_bike_rounded : Icons.directions_walk_rounded,
+                                  color: manager.isCycleway ? Colors.greenAccent : Colors.cyanAccent,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  manager.isCycleway ? 'Veloceļš' : 'Gājēju ceļš',
+                                  style: TextStyle(
+                                    color: manager.isCycleway ? Colors.greenAccent : Colors.cyanAccent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
 
 
@@ -2189,12 +2214,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         itemBuilder: (ctx, idx) {
                           final file = gpxFiles[idx];
                           final fileName = file.path.split(Platform.pathSeparator).last;
+                          String details = '';
+                          try {
+                            final stat = file.statSync();
+                            final dateStr = '${stat.modified.day.toString().padLeft(2, '0')}.${stat.modified.month.toString().padLeft(2, '0')}.${stat.modified.year} ${stat.modified.hour.toString().padLeft(2, '0')}:${stat.modified.minute.toString().padLeft(2, '0')}';
+                            final sizeKb = (stat.size / 1024).toStringAsFixed(1);
+                            details = '$dateStr • $sizeKb KB';
+                          } catch (_) {}
+
                           return ListTile(
-                            leading: const Icon(Icons.history_edu_rounded, color: Colors.white70),
-                            title: Text(fileName, style: const TextStyle(color: Colors.white)),
+                            leading: const Icon(Icons.history_edu_rounded, color: Colors.cyanAccent),
+                            title: Text(fileName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            subtitle: details.isNotEmpty ? Text(details, style: const TextStyle(color: Colors.white54, fontSize: 12)) : null,
                             onTap: () async {
                               Navigator.pop(ctx);
-                              await manager.startSimulationFromFile(file, interval: const Duration(seconds: 1));
+                              final count = await manager.startSimulationFromFile(file, interval: const Duration(seconds: 1));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Palaista GPX simulācija: $fileName ($count punkti)'),
+                                    backgroundColor: Colors.teal.shade800,
+                                    duration: const Duration(seconds: 4),
+                                  ),
+                                );
+                              }
                             },
                           );
                         },

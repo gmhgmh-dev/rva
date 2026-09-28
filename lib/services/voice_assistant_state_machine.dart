@@ -22,7 +22,10 @@ class VoiceAssistantStateMachine {
   bool _isInReducedSpeedZone;
   bool _isInLivingStreetZone;
   bool _isIn30SpeedZone;
+  bool _isInPedestrianOrBicycleWay;
   String? _currentStreetName;
+  String? _pendingStreetCandidate;
+  int _pendingStreetConfirmations = 0;
   bool announceStreetChanges;
   bool useDynamicPhrases;
 
@@ -37,13 +40,15 @@ class VoiceAssistantStateMachine {
         _currentStreetName = initialStreetName,
         _isInReducedSpeedZone = (initialMaxSpeed != null && initialMaxSpeed < 50),
         _isInLivingStreetZone = (initialMaxSpeed == 20),
-        _isIn30SpeedZone = (initialMaxSpeed == 30);
+        _isIn30SpeedZone = (initialMaxSpeed == 30),
+        _isInPedestrianOrBicycleWay = false;
 
   int? get currentMaxSpeed => _currentMaxSpeed;
   bool get isOneWay => _isOneWay;
   bool get isInReducedSpeedZone => _isInReducedSpeedZone;
   bool get isInLivingStreetZone => _isInLivingStreetZone;
   bool get isIn30SpeedZone => _isIn30SpeedZone;
+  bool get isInPedestrianOrBicycleWay => _isInPedestrianOrBicycleWay;
   String? get currentStreetName => _currentStreetName;
 
   /// Resets state machine to initial values (e.g. at the start of a route)
@@ -58,6 +63,9 @@ class VoiceAssistantStateMachine {
     _isInReducedSpeedZone = (initialMaxSpeed != null && initialMaxSpeed < 50);
     _isInLivingStreetZone = (initialMaxSpeed == 20);
     _isIn30SpeedZone = (initialMaxSpeed == 30);
+    _isInPedestrianOrBicycleWay = false;
+    _pendingStreetCandidate = null;
+    _pendingStreetConfirmations = 0;
   }
 
   /// Formats dynamic street and speed limit announcement:
@@ -107,6 +115,9 @@ class VoiceAssistantStateMachine {
       streetName: point.streetName,
       roadClass: point.roadClass,
       isZone: point.isZone,
+      isCycleway: point.isCycleway,
+      isFootway: point.isFootway,
+      isPath: point.isPath,
       timestamp: point.timestamp,
       vehicleSpeedKmh: point.vehicleSpeedKmh,
       speedTolerance: speedTolerance,
@@ -114,13 +125,16 @@ class VoiceAssistantStateMachine {
     );
   }
 
-  /// Evaluates transitions for speed limit, living zones, and one-way status.
+  /// Evaluates transitions for speed limit, living zones, one-way status, pedestrian/cycleway, and street changes.
   List<VoiceAlertEvent> processUpdate({
     required int? newMaxSpeed,
     required bool? newIsOneWay,
     String? streetName,
     String? roadClass,
     bool isZone = false,
+    bool isCycleway = false,
+    bool isFootway = false,
+    bool isPath = false,
     DateTime? timestamp,
     double? vehicleSpeedKmh,
     int speedTolerance = 0,
@@ -131,10 +145,48 @@ class VoiceAssistantStateMachine {
 
     // Determine if road is living street (20 km/h)
     final isLiving = (roadClass?.toLowerCase() == 'living_street') ||
-        (newMaxSpeed == 20) ||
+        (newMaxSpeed == 20 && !isCycleway && !isFootway && !isPath) ||
         (streetName?.toLowerCase() == 'dzīvojamā zona');
 
     final effectiveSpeed = isLiving ? 20 : newMaxSpeed;
+
+    // 0. GĀJĒJU UN VELOSIPĒDU CEĻŠ
+    final isPedOrBike = isCycleway ||
+        isFootway ||
+        isPath ||
+        (roadClass?.toLowerCase() == 'cycleway') ||
+        (roadClass?.toLowerCase() == 'footway') ||
+        (roadClass?.toLowerCase() == 'pedestrian') ||
+        (roadClass?.toLowerCase() == 'path') ||
+        (streetName?.toLowerCase().contains('velosipēd') ?? false) ||
+        (streetName?.toLowerCase().contains('gājēj') ?? false);
+
+    if (isPedOrBike) {
+      if (!_isInPedestrianOrBicycleWay) {
+        _isInPedestrianOrBicycleWay = true;
+        String text;
+        if (isCycleway && !isFootway) {
+          text = 'Atrodaties uz velosipēdu ceļa.';
+        } else if (isFootway && !isCycleway) {
+          text = 'Atrodaties uz gājēju ceļa.';
+        } else {
+          text = 'Atrodaties uz gājēju un velosipēdu ceļa.';
+        }
+        events.add(
+          VoiceAlertEvent(
+            type: VoiceAlertType.pedestrianOrBicycleWayEntered,
+            spokenText: text,
+            timestamp: now,
+            speedLimitKmh: effectiveSpeed ?? 20,
+            isOneWay: false,
+            streetName: streetName ?? _currentStreetName,
+          ),
+        );
+      }
+    } else if (_isInPedestrianOrBicycleWay) {
+      // Izbrauca no gājēju / velo ceļa atpakaļ uz auto brauktuvi
+      _isInPedestrianOrBicycleWay = false;
+    }
 
     // 1. DZĪVOJAMĀS ZONAS STĀVOKLIS (20 km/h)
     if (isLiving) {
@@ -285,53 +337,80 @@ class VoiceAssistantStateMachine {
       }
     }
 
-    // 4. IELAS MAIŅAS STĀVOKLIS
+    // 4. IELAS MAIŅAS STĀVOKLIS (ar krustojumu pret-spama filtru)
     if (streetName != null && streetName.trim().isNotEmpty) {
       final normalizedNewStreet = streetName.trim();
-      final isChanged = _currentStreetName != null && _currentStreetName != normalizedNewStreet;
-      if (isChanged && announceStreetChanges) {
-        final alreadyHasAlert = events.any((e) =>
-            e.type == VoiceAlertType.speed30ZoneEntered ||
-            e.type == VoiceAlertType.livingStreetEntered ||
-            e.type == VoiceAlertType.speedReduced ||
-            e.type == VoiceAlertType.speedRestored);
 
-        if (!alreadyHasAlert) {
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.streetChanged,
-              spokenText: formatStreetAnnouncement(
-                streetName: normalizedNewStreet,
-                maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
-              ),
-              timestamp: now,
-              speedLimitKmh: effectiveSpeed ?? _currentMaxSpeed ?? 50,
-              isOneWay: _isOneWay,
-              streetName: normalizedNewStreet,
-            ),
-          );
+      if (_currentStreetName == null) {
+        // Sākotnējais ielas stāvoklis (bez maiņas paziņojuma)
+        _currentStreetName = normalizedNewStreet;
+        _pendingStreetCandidate = null;
+        _pendingStreetConfirmations = 0;
+      } else if (_currentStreetName != normalizedNewStreet) {
+        // Ziņotā iela atšķiras no pašreizējās ielas.
+        // Lai novērstu šķērsojamo ielu spamu krustojumos, kur GPS uz 1 sekundi pieskaras šķērsielai:
+        // Jaunā iela tiek apstiprināta tikai tad, ja tā novērota vismaz 2 secīgus atjauninājumus.
+        if (_pendingStreetCandidate == normalizedNewStreet) {
+          _pendingStreetConfirmations++;
+        } else {
+          _pendingStreetCandidate = normalizedNewStreet;
+          _pendingStreetConfirmations = 1;
         }
+
+        if (_pendingStreetConfirmations >= 2) {
+          // Apstiprināts, ka lietotājs tiešām ir nogriezies uz jauno ielu!
+          _currentStreetName = normalizedNewStreet;
+          _pendingStreetCandidate = null;
+          _pendingStreetConfirmations = 0;
+
+          if (announceStreetChanges) {
+            final alreadyHasAlert = events.any((e) =>
+                e.type == VoiceAlertType.speed30ZoneEntered ||
+                e.type == VoiceAlertType.livingStreetEntered ||
+                e.type == VoiceAlertType.speedReduced ||
+                e.type == VoiceAlertType.speedRestored ||
+                e.type == VoiceAlertType.pedestrianOrBicycleWayEntered);
+
+            if (!alreadyHasAlert) {
+              events.add(
+                VoiceAlertEvent(
+                  type: VoiceAlertType.streetChanged,
+                  spokenText: formatStreetAnnouncement(
+                    streetName: normalizedNewStreet,
+                    maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+                  ),
+                  timestamp: now,
+                  speedLimitKmh: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+                  isOneWay: _isOneWay,
+                  streetName: normalizedNewStreet,
+                ),
+              );
+            }
+          }
+        }
+      } else {
+        // Lietotājs ir uz tās pašas ielas vai atgriezās atpakaļ pēc krustojuma šķērsošanas
+        _pendingStreetCandidate = null;
+        _pendingStreetConfirmations = 0;
       }
-      _currentStreetName = normalizedNewStreet;
     }
 
-    // 5. ĀTRUMA PĀRSNIEGŠANAS BRÄŖDINÄ€JUMS
+    // 5. ĀTRUMA PĀRSNIEGŠANAS BRĪDINĀJUMS
     if (effectiveSpeed != null && vehicleSpeedKmh != null) {
       final speedLimitWithTolerance = effectiveSpeed + speedTolerance;
       final isCurrentlySpeeding = vehicleSpeedKmh > speedLimitWithTolerance;
 
       if (isCurrentlySpeeding) {
-        // Tikai brÄ«dinÄm, ja iepriekÅ nebijÄm pÄrsnieguÅi vai ir pagÄjis pietiekami ilgs laiks (piem., 10 sekundes)
-        final canWarnAgain = _lastSpeedingWarningTime == null || 
+        final canWarnAgain = _lastSpeedingWarningTime == null ||
             now.difference(_lastSpeedingWarningTime!).inSeconds >= speedWarningInterval;
-            
+
         if (!_isSpeeding || canWarnAgain) {
           _isSpeeding = true;
           _lastSpeedingWarningTime = now;
           events.add(
             VoiceAlertEvent(
               type: VoiceAlertType.speedingWarning,
-              spokenText: 'Jūs pārsniedzat atļauto ātrumu.', // JÅ«s pÄrsniedzat atÄ¼auto Ätrumu.',
+              spokenText: 'Jūs pārsniedzat atļauto ātrumu.',
               timestamp: now,
               speedLimitKmh: effectiveSpeed,
               isOneWay: _isOneWay,

@@ -26,6 +26,9 @@ enum VoiceAlertType {
 
   /// Trigger 9: Vehicle exceeds speed limit + tolerance
   speedingWarning,
+
+  /// Trigger 10: User enters a bicycle or pedestrian path
+  pedestrianOrBicycleWayEntered,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

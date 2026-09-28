@@ -289,6 +289,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
             const Text(
+              'Ceļu un pagalmu piesaistes rādiusi (metri)',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Pielāgojiet meklēšanas attālumu ap sevi tuvākajai ielai vai pagalmam. Pieskarieties skaitlim, lai ievadītu precīzu vērtību.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            _buildRadiusTile(
+              context: context,
+              title: 'Ielu meklēšanas rādiuss',
+              subtitle: 'Ieteicamais noklusējums: 40 m. Izmanto galveno un nosaukto ielu noteikšanai.',
+              value: settings.roadSearchRadiusMeters,
+              min: 10,
+              max: 150,
+              defaultValue: 40.0,
+              onChanged: (val) => settings.setRoadSearchRadiusMeters(val),
+            ),
+            const SizedBox(height: 12),
+            _buildRadiusTile(
+              context: context,
+              title: 'Pagalmu un dzīvojamo zonu rādiuss',
+              subtitle: 'Ieteicamais noklusējums: 15 m. Izmanto pagalma brauktuvēm un dzīvojamajām zonām (20 km/h).',
+              value: settings.courtyardSearchRadiusMeters,
+              min: 5,
+              max: 40,
+              defaultValue: 15.0,
+              onChanged: (val) => settings.setCourtyardSearchRadiusMeters(val),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E222B),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: Colors.cyanAccent, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Krustojumu pret-spama aizsardzība: aktīva. Šķērsojamā iela netiek nosaukta uzreiz, bet prasa vismaz 2 secīgus GPS apstiprinājumus.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
               'Sistēmas iestatījumi',
               style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
@@ -379,6 +432,163 @@ class _SettingsScreenState extends State<SettingsScreen> {
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
       value: value,
       onChanged: onChanged,
+    );
+  }
+
+  Widget _buildRadiusTile({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required double value,
+    required double min,
+    required double max,
+    required double defaultValue,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E222B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2C323F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              InkWell(
+                onTap: () => _showNumericInputDialog(
+                  context: context,
+                  title: title,
+                  initialValue: value.round(),
+                  min: min.toInt(),
+                  max: max.toInt(),
+                  onSaved: (val) => onChanged(val.toDouble()),
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${value.round()} m',
+                        style: const TextStyle(color: Colors.cyanAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.edit_outlined, color: Colors.cyanAccent, size: 14),
+                    ],
+                  ),
+                ),
+              ),
+              if ((value - defaultValue).abs() > 0.5) ...[
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Atjaunot ieteikto ($defaultValue m)',
+                  icon: const Icon(Icons.restart_alt_rounded, color: Colors.white54, size: 18),
+                  onPressed: () => onChanged(defaultValue),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              activeTrackColor: Colors.cyanAccent,
+              inactiveTrackColor: const Color(0xFF2C323F),
+              thumbColor: Colors.cyanAccent,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: (max - min).toInt(),
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNumericInputDialog({
+    required BuildContext context,
+    required String title,
+    required int initialValue,
+    required int min,
+    required int max,
+    required ValueChanged<int> onSaved,
+  }) {
+    final controller = TextEditingController(text: initialValue.toString());
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E222B),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ievadiet attālumu metros ($min – $max m):', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                suffixText: 'm',
+                suffixStyle: const TextStyle(color: Colors.cyanAccent),
+                filled: true,
+                fillColor: const Color(0xFF14171F),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Atcelt', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.cyanAccent,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              final parsed = int.tryParse(controller.text.trim());
+              if (parsed != null && parsed >= min && parsed <= max) {
+                onSaved(parsed);
+                Navigator.pop(ctx);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Lūdzu ievadiet skaitli robežās no $min līdz $max')),
+                );
+              }
+            },
+            child: const Text('Saglabāt'),
+          ),
+        ],
+      ),
     );
   }
 

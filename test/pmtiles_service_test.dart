@@ -84,5 +84,31 @@ void main() {
       expect(road.isZone, isTrue);
       expect(road.name, equals('Katoļu iela'));
     });
+
+    test('extractRoadAttributes classifies cycleway correctly', () {
+      final service = PMTilesService();
+      final props = <String, VectorTileValue>{
+        'highway': VectorTileValue(stringValue: 'cycleway'),
+        'name': VectorTileValue(stringValue: 'Lielais prospekts veloceliņš'),
+      };
+
+      final road = service.extractRoadAttributesForTesting(props, 2.0);
+      expect(road.isCycleway, isTrue);
+      expect(road.isPedestrianOrBicycle, isTrue);
+      expect(road.name, equals('Lielais prospekts veloceliņš'));
+      expect(road.maxspeed, equals(20));
+    });
+
+    test('extractRoadAttributes classifies footway correctly', () {
+      final service = PMTilesService();
+      final props = <String, VectorTileValue>{
+        'highway': VectorTileValue(stringValue: 'footway'),
+      };
+
+      final road = service.extractRoadAttributesForTesting(props, 2.0);
+      expect(road.isFootway, isTrue);
+      expect(road.isPedestrianOrBicycle, isTrue);
+      expect(road.name, equals('Gājēju ceļš'));
+    });
   });
 }

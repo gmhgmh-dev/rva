@@ -46,12 +46,17 @@ class PMTilesService {
     double lat,
     double lon, {
     int? targetZoom,
-    double maxRadiusMeters = 150.0,
+    double? maxRadiusMeters,
+    double? courtyardRadiusMeters,
+    String? currentRoadName,
   }) async {
     final archive = _archive;
     if (archive == null) {
       return null;
     }
+
+    final effectiveMaxRadius = maxRadiusMeters ?? 40.0;
+    final effectiveCourtyardRadius = courtyardRadiusMeters ?? 15.0;
 
     // Default zoom level 14 is the standard resolution for road geometries in vector basemaps
     final defaultZoom = (targetZoom ?? 14);
@@ -104,6 +109,8 @@ class PMTilesService {
       VectorTileFeature? closestLivingFeature;
       int extentLiving = 4096;
 
+      final normalizedCurrentRoad = currentRoadName?.trim().toLowerCase();
+
       for (final layer in roadLayers) {
         final extent = layer.extent > 0 ? layer.extent : 4096;
         final px = (tileXDouble - tileX) * extent;
@@ -144,8 +151,7 @@ class PMTilesService {
           final props = feature.decodeProperties();
 
           // Check if this feature is a living street (20 km/h)
-          final roadClass = props['class']?.value.toString().toLowerCase() ??
-              props['highway']?.value.toString().toLowerCase();
+          final roadClass = (props['class']?.value ?? props['highway']?.value)?.toString().toLowerCase();
           final isLiving = roadClass == 'living_street';
           if (isLiving && featureMinDistSq < minLivingDistanceSq) {
             minLivingDistanceSq = featureMinDistSq;
@@ -160,8 +166,18 @@ class PMTilesService {
               props.containsKey('name:en') ||
               props.containsKey('ref');
 
-          if (hasName && featureMinDistSq < minNamedDistanceSq) {
-            minNamedDistanceSq = featureMinDistSq;
+          // Sticky bias at intersections: if this feature is the current road,
+          // give it an affinity advantage to avoid flickering to perpendicular cross-streets.
+          double effectiveDistSq = featureMinDistSq;
+          if (normalizedCurrentRoad != null && hasName) {
+            final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value?.toString().trim().toLowerCase();
+            if (fName != null && fName == normalizedCurrentRoad) {
+              effectiveDistSq = featureMinDistSq * 0.35; // Sticky current road affinity
+            }
+          }
+
+          if (hasName && effectiveDistSq < minNamedDistanceSq) {
+            minNamedDistanceSq = effectiveDistSq;
             closestNamedFeature = feature;
             extentNamed = extent;
           }
@@ -172,12 +188,12 @@ class PMTilesService {
         return null;
       }
 
-      // 1. High Priority: If within 35 meters of a living street (20 km/h), prioritize it!
+      // 1. High Priority: If within courtyardSearchRadius of a living street (20 km/h), prioritize it!
       if (closestLivingFeature != null && minLivingDistanceSq != double.infinity) {
         final metersPerPixelLiving = (cos(rad) * 40075016.686) / (n * extentLiving);
         final distLivingMeters = sqrt(minLivingDistanceSq) * metersPerPixelLiving;
 
-        if (distLivingMeters <= 15.0) {
+        if (distLivingMeters <= effectiveCourtyardRadius) {
           final props = closestLivingFeature.decodeProperties();
           return _extractRoadAttributes(props, distLivingMeters);
         }
@@ -196,21 +212,21 @@ class PMTilesService {
         distAnyMeters = sqrt(minAnyDistanceSq) * metersPerPixelAny;
       }
 
-      // 2. If the vehicle is very close (<= 15m) to a courtyard driveway or residential way,
+      // 2. If the vehicle is within courtyardSearchRadius to a courtyard driveway or residential way,
       // and the closest named road is significantly further away (> 30m), stay on the courtyard/service way.
-      if (distAnyMeters <= 15.0 && distNamedMeters > 30.0 && closestAnyFeature != null) {
+      if (distAnyMeters <= effectiveCourtyardRadius && distNamedMeters > 30.0 && closestAnyFeature != null) {
         final props = closestAnyFeature.decodeProperties();
         return _extractRoadAttributes(props, distAnyMeters);
       }
 
-      // 3. Otherwise, check if closest named feature is within maxRadiusMeters
-      if (distNamedMeters <= maxRadiusMeters && closestNamedFeature != null) {
+      // 3. Otherwise, check if closest named feature is within roadSearchRadius
+      if (distNamedMeters <= effectiveMaxRadius && closestNamedFeature != null) {
         final props = closestNamedFeature.decodeProperties();
         return _extractRoadAttributes(props, distNamedMeters);
       }
 
-      // 4. Fallback to closest any feature
-      if (distAnyMeters <= maxRadiusMeters && closestAnyFeature != null) {
+      // 4. Fallback to closest any feature within roadSearchRadius
+      if (distAnyMeters <= effectiveMaxRadius && closestAnyFeature != null) {
         final props = closestAnyFeature.decodeProperties();
         return _extractRoadAttributes(props, distAnyMeters);
       }
@@ -279,14 +295,40 @@ class PMTilesService {
       isOneWay = _parseBoolOrOneWay(onewayVal.value);
     }
 
-    // 3. Parse road class
+    // 3. Parse road class & detect pedestrian / cycleway
     final classVal = props['class'] ?? props['highway'];
     if (classVal != null) {
       roadClass = classVal.value.toString();
     }
 
+    final rawClass = roadClass?.toLowerCase() ?? '';
+    final rawSubclass = props['subclass']?.value?.toString().toLowerCase() ?? '';
+    final rawHighway = props['highway']?.value?.toString().toLowerCase() ?? '';
+    final bicycleTag = props['bicycle']?.value?.toString().toLowerCase() ?? '';
+    final footTag = props['foot']?.value?.toString().toLowerCase() ?? '';
+
+    final bool isCycleway = rawClass == 'cycleway' ||
+        rawSubclass == 'cycleway' ||
+        rawHighway == 'cycleway' ||
+        bicycleTag == 'designated' ||
+        bicycleTag == 'yes';
+
+    final bool isFootway = rawClass == 'footway' ||
+        rawSubclass == 'footway' ||
+        rawHighway == 'footway' ||
+        rawClass == 'pedestrian' ||
+        rawHighway == 'pedestrian' ||
+        footTag == 'designated';
+
+    final bool isPath = rawClass == 'path' || rawSubclass == 'path' || rawHighway == 'path';
+
     // living_street default speed limit is 20 km/h according to Latvian traffic law
-    if (roadClass?.toLowerCase() == 'living_street') {
+    if (rawClass == 'living_street') {
+      maxspeed ??= 20;
+    }
+
+    // Default speed limit for pedestrian/bicycle paths
+    if (isCycleway || isFootway || isPath) {
       maxspeed ??= 20;
     }
 
@@ -303,14 +345,19 @@ class PMTilesService {
       }
     }
 
-    // Meaningful fallback for unnamed residential / yard ways
+    // Meaningful fallback for unnamed ways
     if (name == null || name == 'Iela') {
-      final cls = roadClass?.toLowerCase();
-      if (cls == 'service' || cls == 'parking') {
+      if (isCycleway && !isFootway) {
+        name = 'Velosipēdu ceļš';
+      } else if (isFootway && !isCycleway) {
+        name = 'Gājēju ceļš';
+      } else if (isPath || (isCycleway && isFootway)) {
+        name = 'Gājēju un velosipēdu ceļš';
+      } else if (rawClass == 'service' || rawClass == 'parking') {
         name = 'Pagalma brauktuve';
-      } else if (cls == 'living_street') {
+      } else if (rawClass == 'living_street') {
         name = 'Dzīvojamā zona';
-      } else if (cls == 'residential') {
+      } else if (rawClass == 'residential') {
         name = 'Dzīvojamais rajons';
       } else {
         name = 'Pilsētas ceļš';
@@ -330,6 +377,9 @@ class PMTilesService {
       distanceMeters: distanceMeters,
       roadClass: roadClass,
       isZone: isZone,
+      isCycleway: isCycleway,
+      isFootway: isFootway,
+      isPath: isPath,
     );
   }
 

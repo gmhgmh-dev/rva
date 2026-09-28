@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:xml/xml.dart';
 import '../models/road_point.dart';
@@ -127,45 +129,111 @@ class MockLocationService {
     }
   }
 
-  /// Loads the GPX route from a specific File.
-  Future<void> loadRouteFromFile(File file) async {
+  /// Loads the GPX route from a specific File with robust encoding fallback.
+  Future<int> loadRouteFromFile(File file) async {
     try {
-      final gpxString = await file.readAsString();
+      final bytes = await file.readAsBytes();
+      String gpxString;
+      try {
+        gpxString = utf8.decode(bytes);
+      } catch (_) {
+        gpxString = latin1.decode(bytes);
+      }
       final parsed = parseGpxString(gpxString);
       if (parsed.isNotEmpty) {
         _waypoints.clear();
         _waypoints.addAll(parsed);
+        _currentIndex = 0;
+        return parsed.length;
       }
-    } catch (_) {
-      // Ignore and keep what we have
+    } catch (e) {
+      debugPrint('Error loading GPX from file: $e');
     }
+    return 0;
   }
 
   /// Parses GPX XML string into a list of [RoadPoint].
+  /// Supports trkpt, rtept, wpt elements as well as standard speed, time, desc, and extensions tags.
   List<RoadPoint> parseGpxString(String gpxContent) {
     final list = <RoadPoint>[];
     try {
       final document = XmlDocument.parse(gpxContent);
-      final trkpts = document.findAllElements('trkpt');
+      var points = document.findAllElements('trkpt').toList();
+      if (points.isEmpty) {
+        points = document.findAllElements('rtept').toList();
+      }
+      if (points.isEmpty) {
+        points = document.findAllElements('wpt').toList();
+      }
 
-      for (final trkpt in trkpts) {
-        final latStr = trkpt.getAttribute('lat') ?? '0.0';
-        final lonStr = trkpt.getAttribute('lon') ?? '0.0';
+      for (final pt in points) {
+        final latStr = pt.getAttribute('lat') ?? '0.0';
+        final lonStr = pt.getAttribute('lon') ?? '0.0';
         final lat = double.tryParse(latStr) ?? 0.0;
         final lon = double.tryParse(lonStr) ?? 0.0;
 
-        String street = 'Ventspils';
+        String street = 'Pilsētas ceļš';
         int limit = 50;
         bool oneWay = false;
-        double speed = 40.0;
+        double speed = 25.0;
+        DateTime pointTime = DateTime.now();
+        String? roadClass;
+        bool isZone = false;
+        bool isCycleway = false;
+        bool isFootway = false;
+        bool isPath = false;
 
-        final extensions = trkpt.findElements('extensions').firstOrNull;
+        // 1. Time
+        final timeElem = pt.findElements('time').firstOrNull;
+        if (timeElem != null) {
+          final dt = DateTime.tryParse(timeElem.innerText.trim());
+          if (dt != null) pointTime = dt;
+        }
+
+        // 2. Speed (GPX standard is m/s, convert to km/h)
+        final speedElem = pt.findElements('speed').firstOrNull;
+        if (speedElem != null) {
+          final speedMs = double.tryParse(speedElem.innerText.trim());
+          if (speedMs != null) {
+            speed = speedMs * 3.6;
+          }
+        }
+
+        // 3. Desc parsing (e.g. "Iela: Katoļu iela, Atļauts: 50 km/h, Reāls: 0.3 km/h")
+        final descElem = pt.findElements('desc').firstOrNull;
+        if (descElem != null) {
+          final descText = descElem.innerText.trim();
+          final streetMatch = RegExp(r'Iela:\s*([^,]+)').firstMatch(descText);
+          if (streetMatch != null) {
+            final s = streetMatch.group(1)!.trim();
+            if (s.isNotEmpty && s.toLowerCase() != 'null') street = s;
+          }
+          final limitMatch = RegExp(r'Atļauts:\s*(\d+)\s*km/h').firstMatch(descText);
+          if (limitMatch != null) {
+            limit = int.tryParse(limitMatch.group(1)!) ?? limit;
+          }
+          final realSpeedMatch = RegExp(r'Reāls:\s*([\d\.]+)\s*km/h').firstMatch(descText);
+          if (realSpeedMatch != null) {
+            final rs = double.tryParse(realSpeedMatch.group(1)!);
+            if (rs != null) speed = rs;
+          }
+        }
+
+        // 4. Name element
+        final nameElem = pt.findElements('name').firstOrNull;
+        if (nameElem != null && street == 'Pilsētas ceļš') {
+          final n = nameElem.innerText.trim();
+          if (n.isNotEmpty && n.toLowerCase() != 'null') street = n;
+        }
+
+        // 5. Extensions
+        final extensions = pt.findElements('extensions').firstOrNull;
         if (extensions != null) {
           final streetElem = extensions.findElements('street_name').firstOrNull;
           if (streetElem != null) street = streetElem.innerText.trim();
 
           final limitElem = extensions.findElements('speed_limit').firstOrNull;
-          if (limitElem != null) limit = int.tryParse(limitElem.innerText.trim()) ?? 50;
+          if (limitElem != null) limit = int.tryParse(limitElem.innerText.trim()) ?? limit;
 
           final onewayElem = extensions.findElements('oneway').firstOrNull;
           if (onewayElem != null) {
@@ -173,10 +241,26 @@ class MockLocationService {
             oneWay = (val == '1' || val.toLowerCase() == 'true');
           }
 
-          final speedElem = extensions.findElements('vehicle_speed').firstOrNull;
-          if (speedElem != null) {
-            speed = double.tryParse(speedElem.innerText.trim()) ?? 40.0;
+          final speedElem2 = extensions.findElements('vehicle_speed').firstOrNull;
+          if (speedElem2 != null) {
+            speed = double.tryParse(speedElem2.innerText.trim()) ?? speed;
           }
+
+          final classElem = extensions.findElements('road_class').firstOrNull;
+          if (classElem != null) roadClass = classElem.innerText.trim();
+
+          final zoneElem = extensions.findElements('is_zone').firstOrNull;
+          if (zoneElem != null) isZone = (zoneElem.innerText.trim().toLowerCase() == 'true');
+        }
+
+        // Check if bicycle or pedestrian way
+        final lower = street.toLowerCase();
+        if (lower.contains('velosipēd') || lower.contains('veloceļ')) {
+          isCycleway = true;
+          limit = 20;
+        } else if (lower.contains('gājēj')) {
+          isFootway = true;
+          limit = 20;
         }
 
         list.add(
@@ -187,12 +271,18 @@ class MockLocationService {
             maxSpeedLimitKmh: limit,
             isOneWay: oneWay,
             streetName: street,
-            timestamp: DateTime.now(),
+            timestamp: pointTime,
+            dataSource: 'Ierakstīts GPX maršruts',
+            roadClass: roadClass,
+            isZone: isZone,
+            isCycleway: isCycleway,
+            isFootway: isFootway,
+            isPath: isPath,
           ),
         );
       }
     } catch (e) {
-      // If parsing fails, list will be empty
+      debugPrint('GPX parse error: $e');
     }
     return list;
   }

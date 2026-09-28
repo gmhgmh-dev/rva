@@ -91,6 +91,9 @@ class DrivingAssistantManager extends ChangeNotifier {
   bool get isInLivingStreetZone => stateMachine.isInLivingStreetZone;
   bool get isIn30SpeedZone => stateMachine.isIn30SpeedZone;
   String? get currentStreetName => stateMachine.currentStreetName;
+  bool get isInPedestrianOrBicycleWay => stateMachine.isInPedestrianOrBicycleWay;
+  bool get isCycleway => _currentPoint?.isCycleway ?? false;
+  bool get isFootway => (_currentPoint?.isFootway ?? false) || (_currentPoint?.isPath ?? false);
   bool get isOfflineMapLoaded => pmTilesService.isLoaded;
 
   Future<void> init({bool loadAsset = true}) async {
@@ -148,7 +151,7 @@ class DrivingAssistantManager extends ChangeNotifier {
   }
 
   /// Starts a simulation from a specific GPX File
-  Future<void> startSimulationFromFile(File file, {Duration interval = const Duration(seconds: 1)}) async {
+  Future<int> startSimulationFromFile(File file, {Duration interval = const Duration(seconds: 1)}) async {
     await stop();
     _currentPoint = null;
     stateMachine.reset();
@@ -156,10 +159,11 @@ class DrivingAssistantManager extends ChangeNotifier {
     _mode = DriveMode.mockSimulation;
     notifyListeners();
 
-    await mockLocationService.loadRouteFromFile(file);
+    final count = await mockLocationService.loadRouteFromFile(file);
 
     _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
     await mockLocationService.startSimulation(interval: interval);
+    return count;
   }
 
   /// Manually advance one waypoint in the simulation (helpful for testing or stepping through).
@@ -184,6 +188,10 @@ class DrivingAssistantManager extends ChangeNotifier {
     stateMachine.reset();
     _alertHistory.clear();
     _firstRealPointAnnounced = false;
+
+    // Apply latest user-configured search radii
+    realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
+    realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
 
     final started = await realLocationService.startTracking();
     if (started) {
@@ -217,16 +225,51 @@ class DrivingAssistantManager extends ChangeNotifier {
   }
 
   /// Central point handler: feeds state machine, triggers voice, and logs event.
-  void _onNewRoadPoint(RoadPoint point) {
-    _currentPoint = point;
+  void _onNewRoadPoint(RoadPoint point) async {
+    // Keep real location service settings in sync with current street & radius preferences
+    realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
+    realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.currentRoadName = stateMachine.currentStreetName;
+
+    RoadPoint effectivePoint = point;
+
+    // During GPX file simulation, ground coordinates in PMTiles offline vector map
+    // so real offline map attributes (streets, limits, one-way, bike/foot paths) are evaluated.
+    if (_mode == DriveMode.mockSimulation && pmTilesService.isLoaded) {
+      try {
+        final roadAttr = await pmTilesService.getRoadAttributes(
+          point.latitude,
+          point.longitude,
+          maxRadiusMeters: settingsService.roadSearchRadiusMeters,
+          courtyardRadiusMeters: settingsService.courtyardSearchRadiusMeters,
+          currentRoadName: stateMachine.currentStreetName,
+        );
+        if (roadAttr != null) {
+          effectivePoint = point.copyWith(
+            streetName: roadAttr.name ?? point.streetName,
+            maxSpeedLimitKmh: roadAttr.maxspeed ?? point.maxSpeedLimitKmh,
+            isOneWay: roadAttr.isOneWay,
+            roadClass: roadAttr.roadClass ?? point.roadClass,
+            isZone: roadAttr.isZone,
+            isCycleway: roadAttr.isCycleway,
+            isFootway: roadAttr.isFootway,
+            isPath: roadAttr.isPath,
+          );
+        }
+      } catch (e) {
+        debugPrint('PMTiles lookup error during simulation: $e');
+      }
+    }
+
+    _currentPoint = effectivePoint;
 
     // Record the point for GPX
     if (_mode == DriveMode.realGps) {
-      tripRecorderService.recordPoint(point);
+      tripRecorderService.recordPoint(effectivePoint);
     }
 
     final events = stateMachine.processRoadPoint(
-      point,
+      effectivePoint,
       speedTolerance: settingsService.speedTolerance,
       speedWarningInterval: settingsService.speedWarningInterval,
     );
@@ -236,8 +279,8 @@ class DrivingAssistantManager extends ChangeNotifier {
       _firstRealPointAnnounced = true;
       if (events.isEmpty) {
         final text = VoiceAssistantStateMachine.formatStreetAnnouncement(
-          streetName: point.streetName,
-          maxSpeed: point.maxSpeedLimitKmh,
+          streetName: effectivePoint.streetName,
+          maxSpeed: effectivePoint.maxSpeedLimitKmh,
         );
         ttsService.speak(text);
       }

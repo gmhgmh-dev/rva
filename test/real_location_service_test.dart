@@ -12,7 +12,14 @@ class FakePMTilesServiceLoaded extends PMTilesService {
   bool get isLoaded => true;
 
   @override
-  Future<RoadAttributes?> getRoadAttributes(double lat, double lon, {int? targetZoom, double maxRadiusMeters = 60.0}) async {
+  Future<RoadAttributes?> getRoadAttributes(
+    double lat,
+    double lon, {
+    int? targetZoom,
+    double maxRadiusMeters = 40.0,
+    double courtyardRadiusMeters = 15.0,
+    String? currentRoadName,
+  }) async {
     return const RoadAttributes(
       maxspeed: 30,
       isOneWay: true,
