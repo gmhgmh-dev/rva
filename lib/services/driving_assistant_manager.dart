@@ -33,7 +33,8 @@ class DrivingAssistantManager extends ChangeNotifier {
   final PMTilesService pmTilesService;
   final MapDownloaderService mapDownloaderService;
   final TripRecorderService tripRecorderService;
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  AudioPlayer? _audioPlayer;
+  AudioPlayer get audioPlayer => _audioPlayer ??= AudioPlayer();
 
   DriveMode _mode = DriveMode.idle;
   RoadPoint? _currentPoint;
@@ -293,7 +294,7 @@ class DrivingAssistantManager extends ChangeNotifier {
       }
       if (!_isMuted) {
         if (event.type == VoiceAlertType.speedingWarning && settingsService.speedingBeepOnly) {
-          _audioPlayer.play(AssetSource('beep.wav'));
+          audioPlayer.play(AssetSource('beep.wav'));
         } else {
           ttsService.speak(event.spokenText);
         }
@@ -311,6 +312,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     ttsService.dispose();
     pmTilesService.close();
     mapDownloaderService.dispose();
+    _audioPlayer?.dispose();
     super.dispose();
   }
 }

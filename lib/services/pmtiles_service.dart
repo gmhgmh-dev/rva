@@ -170,7 +170,7 @@ class PMTilesService {
           // give it an affinity advantage to avoid flickering to perpendicular cross-streets.
           double effectiveDistSq = featureMinDistSq;
           if (normalizedCurrentRoad != null && hasName) {
-            final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value?.toString().trim().toLowerCase();
+            final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value.toString().trim().toLowerCase();
             if (fName != null && fName == normalizedCurrentRoad) {
               effectiveDistSq = featureMinDistSq * 0.35; // Sticky current road affinity
             }
@@ -302,10 +302,10 @@ class PMTilesService {
     }
 
     final rawClass = roadClass?.toLowerCase() ?? '';
-    final rawSubclass = props['subclass']?.value?.toString().toLowerCase() ?? '';
-    final rawHighway = props['highway']?.value?.toString().toLowerCase() ?? '';
-    final bicycleTag = props['bicycle']?.value?.toString().toLowerCase() ?? '';
-    final footTag = props['foot']?.value?.toString().toLowerCase() ?? '';
+    final rawSubclass = props['subclass']?.value.toString().toLowerCase() ?? '';
+    final rawHighway = props['highway']?.value.toString().toLowerCase() ?? '';
+    final bicycleTag = props['bicycle']?.value.toString().toLowerCase() ?? '';
+    final footTag = props['foot']?.value.toString().toLowerCase() ?? '';
 
     final bool isCycleway = rawClass == 'cycleway' ||
         rawSubclass == 'cycleway' ||

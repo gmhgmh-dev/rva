@@ -23,6 +23,8 @@ class VoiceAssistantStateMachine {
   bool _isInLivingStreetZone;
   bool _isIn30SpeedZone;
   bool _isInPedestrianOrBicycleWay;
+  bool _isCurrentWayCycleway = false;
+  bool _isCurrentWayFootway = false;
   String? _currentStreetName;
   String? _pendingStreetCandidate;
   int _pendingStreetConfirmations = 0;
@@ -161,13 +163,19 @@ class VoiceAssistantStateMachine {
         (streetName?.toLowerCase().contains('velosipēd') ?? false) ||
         (streetName?.toLowerCase().contains('gājēj') ?? false);
 
+    final bool currentIsCycle = isCycleway || (roadClass?.toLowerCase() == 'cycleway') || (streetName?.toLowerCase().contains('velosipēd') ?? false);
+    final bool currentIsFoot = isFootway || (roadClass?.toLowerCase() == 'footway') || (streetName?.toLowerCase().contains('gājēj') ?? false);
+
     if (isPedOrBike) {
-      if (!_isInPedestrianOrBicycleWay) {
+      final changedPathType = (currentIsCycle && !_isCurrentWayCycleway) || (currentIsFoot && !_isCurrentWayFootway);
+      if (!_isInPedestrianOrBicycleWay || changedPathType) {
         _isInPedestrianOrBicycleWay = true;
+        _isCurrentWayCycleway = currentIsCycle;
+        _isCurrentWayFootway = currentIsFoot;
         String text;
-        if (isCycleway && !isFootway) {
+        if (currentIsCycle && !currentIsFoot) {
           text = 'Atrodaties uz velosipēdu ceļa.';
-        } else if (isFootway && !isCycleway) {
+        } else if (currentIsFoot && !currentIsCycle) {
           text = 'Atrodaties uz gājēju ceļa.';
         } else {
           text = 'Atrodaties uz gājēju un velosipēdu ceļa.';
@@ -186,6 +194,8 @@ class VoiceAssistantStateMachine {
     } else if (_isInPedestrianOrBicycleWay) {
       // Izbrauca no gājēju / velo ceļa atpakaļ uz auto brauktuvi
       _isInPedestrianOrBicycleWay = false;
+      _isCurrentWayCycleway = false;
+      _isCurrentWayFootway = false;
     }
 
     // 1. DZĪVOJAMĀS ZONAS STĀVOKLIS (20 km/h)
@@ -226,7 +236,9 @@ class VoiceAssistantStateMachine {
     }
 
     // 2. ĀTRUMA IEROBEŽOJUMA STĀVOKLIS
-    if (effectiveSpeed != null && !isLiving) {
+    if (isPedOrBike) {
+      _currentMaxSpeed = effectiveSpeed;
+    } else if (effectiveSpeed != null && !isLiving) {
       if (effectiveSpeed < 50) {
         // Pāreja no parastās/lielāka ātruma zonas uz samazinātu ātrumu (< 50 km/h)
         // vai jauna samazinātā ātruma vērtība

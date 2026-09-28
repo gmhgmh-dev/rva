@@ -44,7 +44,7 @@ void main() {
 
     // Verify Action Buttons
     expect(find.text('Sākt reālo GPS'), findsOneWidget);
-    expect(find.text('Palaist Ventspils testa braucienu'), findsOneWidget);
+    expect(find.text('Testa brauciens'), findsOneWidget);
 
     // Verify Default Sign values (50 km/h)
     expect(find.text('50'), findsOneWidget);

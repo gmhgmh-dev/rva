@@ -16,8 +16,8 @@ class FakePMTilesServiceLoaded extends PMTilesService {
     double lat,
     double lon, {
     int? targetZoom,
-    double maxRadiusMeters = 40.0,
-    double courtyardRadiusMeters = 15.0,
+    double? maxRadiusMeters = 40.0,
+    double? courtyardRadiusMeters = 15.0,
     String? currentRoadName,
   }) async {
     return const RoadAttributes(

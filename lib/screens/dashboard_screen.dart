@@ -1921,20 +1921,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
       case VoiceAlertType.streetChanged:
-
-
         badgeColor = Colors.amberAccent;
-
-
         badgeLabel = 'IELAS MAIŅA';
-
-
         alertIcon = Icons.alt_route_rounded;
-
-
         break;
-
-
+      case VoiceAlertType.pedestrianOrBicycleWayEntered:
+        badgeColor = Colors.tealAccent;
+        badgeLabel = 'GĀJĒJU / VELO CEĻŠ';
+        alertIcon = Icons.directions_bike_rounded;
+        break;
     }
 
 
