@@ -6,16 +6,40 @@ Formāts balstīts uz [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) u
 
 ---
 
-## [0.2.0] - Izstrādē (In Progress)
+## [0.2.0] - 2026-09-28
 
 ### Pievienots / Uzlabots (Added / Improved)
-- [x] Dinamiska ielas nosaukuma paziņošana pirms brīdinājumiem ("Atrodaties uz [Ielas nosaukums]").
-- [x] Dzīvojamo zonu (`highway=living_street` / 20 km/h) prioritāra atpazīšana un balss brīdinājums pagalmā esošam auto (nepieļauj tālāku ielu kļūdainu izvēli).
-- [x] 30 km/h zonas (ielu kvartāls / ceļa zīme 521/522) skaidra nošķiršana no parasta ielas posma ar 30 km/h ierobežojumu (ceļa zīme 323).
-  - Zonā: *"Iebraucāt 30 kilometru stundā ātruma ierobežojuma zonā"* un *"Ātruma ierobežojuma zona ir beigusies"*.
-  - Parastā posmā: *"Atrodaties uz [Iela]. Atļautais ātrums 30 kilometri stundā"* un *"Atrodaties uz [Iela]. Atļautais ātrums 50 kilometri stundā"*.
-- [x] Sākuma ielas un ātruma paziņošana balsī uzreiz pēc GPS signāla uztveršanas.
-- [x] Automātiska versijas numura pievienošana ģenerētā APK faila nosaukumam (`rva-v0.2.0.apk`).
+- **Lietotāja pielāgojami meklēšanas rādiusi (metri):**
+  - Iestatījumos pievienota jauna sadaļa ar plūstošiem slīdņiem un tiešu skaitlisku ievadi (`_buildRadiusTile`).
+  - **Ielu meklēšanas rādiuss:** 10–150 m (ieteiktais noklusējums: **40 m**).
+  - **Pagalmu un dzīvojamo zonu rādiuss:** 5–40 m (ieteiktais noklusējums: **15 m**).
+  - Pievienota tūlītēja atiestatīšanas poga uz ieteiktajām vērtībām.
+  - Novērš kļūdainu "pieķeršanos" paralēliem pagalmiem, braucot pa ielu 50 km/h.
+- **Gājēju un velosipēdu ceļu detekcija un balss paziņojumi:**
+  - OpenStreetMap atribūtu nolasīšana (`cycleway`, `footway`, `pedestrian`, `path`, `bicycle=designated`, `foot=designated`).
+  - Skaidri balss paziņojumi:
+    - *"Atrodaties uz velosipēdu ceļa."*
+    - *"Atrodaties uz gājēju ceļa."*
+    - *"Atrodaties uz gājēju un velosipēdu ceļa."*
+  - Ieviests debounce/sliekšņa mehānisms pret nevajadzīgiem atkārtojumiem.
+  - Informācijas panelī pievienota dinamiska statusa birka (`Veloceļš` / `Gājēju ceļš`).
+- **Krustojumu pret-spama aizsardzība:**
+  - 2 soļu histēreses filtrs `VoiceAssistantStateMachine`: viena punkta GPS trokšņi uz perpendikulārām ielām tiek nofiltrēti.
+  - Līpošā ielas afinitāte (0.35x attāluma reizinātājs) `PMTilesService`, lai krustojumos saglabātu esošo ielu.
+- **GPX failu nolasīšanas un simulācijas dzinējs:**
+  - Pilns atbalsts visiem GPX formātiem: `<trkpt>`, `<rtept>`, `<wpt>`.
+  - Ātruma nolasīšana no `<desc>` (`Iela: ...`, `Atļauts: ... km/h`, `Reāls: ... km/h`) un standarta `<speed>` tagiem (ar m/s konversiju uz km/h).
+  - Universāls kodējumu atbalsts (`UTF-8` un `Latin-1` atkāpšanās).
+  - Simulācijas punktu dinamiska piesaiste lokālajai PMTiles vektorkartei pēc lietotāja norādītajiem rādiusiem.
+  - Testa maršrutu izvēlnē redzams failu modifikācijas datums, laiks un faila izmērs (KB).
+- **Dinamiskie ielu nosaukumi un ātruma zonas:**
+  - Dinamiska ielas nosaukuma paziņošana pirms brīdinājumiem ("Atrodaties uz [Ielas nosaukums]").
+  - Dzīvojamo zonu (`highway=living_street` / 20 km/h) prioritāra atpazīšana un balss brīdinājums pagalmā esošam auto.
+  - 30 km/h zonas (ielu kvartāls / ceļa zīme 521/522) skaidra nošķiršana no parasta ielas posma ar 30 km/h ierobežojumu (ceļa zīme 323).
+  - Sākuma ielas un ātruma paziņošana balsī uzreiz pēc GPS signāla uztveršanas.
+- **Droša arhitektūra un testēšana:**
+  - Visi 50 unit un widget testi izpildās ar 100% panākumiem.
+  - Keystore pārbaudes skripts un debug kļūmjpārlēce CI/CD procesā.
 
 ### Plānotie uzlabojumi
 - [ ] Vairāku valodu atbalsts balss asistentam un saskarnei (EN/LV).
