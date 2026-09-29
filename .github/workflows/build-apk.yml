@@ -3,13 +3,13 @@ name: Build and Release APK
 on:
   push:
     branches:
-      - 'dev/v0.2.0'
+      - 'dev/**'
       - 'main'
     tags:
       - 'v*'
   pull_request:
     branches:
-      - 'dev/v0.2.0'
+      - 'dev/**'
       - 'main'
 
 jobs:
@@ -109,6 +109,31 @@ jobs:
 
       - name: Build APK
         run: flutter build apk --release
+
+      - name: Rename APK to standardized convention
+        run: |
+          python3 - << 'EOF'
+          import os, glob, datetime, subprocess, shutil
+          version = "0.2.1"
+          try:
+              with open("pubspec.yaml", "r", encoding="utf-8") as f:
+                  for line in f:
+                      if line.startswith("version:"):
+                          version = line.split(":", 1)[1].strip().split("+")[0]
+                          break
+          except Exception:
+              pass
+          sha = subprocess.check_output(["git", "rev-parse", "--short=7", "HEAD"]).decode("utf-8").strip()
+          now = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M")
+          std_name = f"rva-v{version}-{now}-{sha}.apk"
+          print(f"Standardized APK Name: {std_name}")
+          apk_dir = "build/app/outputs/flutter-apk"
+          rel_apk = os.path.join(apk_dir, "app-release.apk")
+          if os.path.exists(rel_apk):
+              dest = os.path.join(apk_dir, std_name)
+              shutil.copy2(rel_apk, dest)
+              print(f"Copied {rel_apk} -> {dest}")
+          EOF
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
