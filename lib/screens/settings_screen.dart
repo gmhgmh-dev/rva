@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/driving_assistant_manager.dart';
 import '../services/map_downloader_service.dart';
 import '../services/settings_service.dart';
+import 'about_screen.dart';
 
 /// Settings screen managing the offline Latvia PMTiles vector map.
 class SettingsScreen extends StatefulWidget {
@@ -809,6 +810,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+            const Divider(color: Color(0xFF2C323F)),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.info_outline_rounded, color: Color(0xFF8AB4F8), size: 22),
+              ),
+              title: const Text('Par lietotni (About)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Versija ${SettingsService.appVersion} • Funkcijas, atvērtā koda licences un privātums', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.white38),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
           ],
         );
       },

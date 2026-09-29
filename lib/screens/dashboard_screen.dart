@@ -18,6 +18,7 @@ import '../widgets/speed_sign_widget.dart';
 
 
 import 'settings_screen.dart';
+import 'about_screen.dart';
 
 
 
@@ -281,6 +282,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
 
+          IconButton(
+            tooltip: 'Par lietotni',
+            icon: const Icon(Icons.info_outline_rounded, color: Colors.white70),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AboutScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
 
 
