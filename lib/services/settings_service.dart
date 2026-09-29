@@ -7,10 +7,16 @@ enum SpeedToleranceMode {
   percentage,
 }
 
+enum VoiceAlertStyle {
+  concise,  // Lakoniskais stils: "Kuldīgas iela. Vienvirziena iela."
+  detailed, // Paplašinātais stils: "Nogriezāties uz Kuldīgas iela. Vienvirziena iela."
+}
+
 class SettingsService extends ChangeNotifier {
   static const String appVersion = '0.2.1';
 
   static const _keyUseDynamicPhrases = 'use_dynamic_phrases';
+  static const _keyVoiceAlertStyle = 'voice_alert_style';
   static const _keyAnnounceStreetChanges = 'announce_street_changes';
   static const _keyIsMuted = 'is_muted';
   static const _keySpeedTolerance = 'speed_tolerance';
@@ -38,6 +44,7 @@ class SettingsService extends ChangeNotifier {
   static const _keySpeedCameraAlerts = 'speed_camera_alerts';
 
   bool _useDynamicPhrases = true;
+  VoiceAlertStyle _voiceAlertStyle = VoiceAlertStyle.concise;
   bool _announceStreetChanges = true;
   bool _isMuted = false;
   int _speedTolerance = 0; // +0 km/h default
@@ -60,11 +67,12 @@ class SettingsService extends ChangeNotifier {
   bool _prioritizePedestrianAndCycleways = false; // Recommended default: false (car mode)
   bool _audioDucking = true; // Recommended default: true
   bool _lookaheadAlerts = true; // Recommended default: true
-  double _lookaheadDistanceMeters = 70.0; // Recommended default: 70m
+  double _lookaheadDistanceMeters = 70.0; // Recommended default 70m
   bool _trafficCalmingAlerts = true; // Recommended default: true
   bool _speedCameraAlerts = true; // Recommended default: true
 
   bool get useDynamicPhrases => _useDynamicPhrases;
+  VoiceAlertStyle get voiceAlertStyle => _voiceAlertStyle;
   bool get announceStreetChanges => _announceStreetChanges;
   bool get isMuted => _isMuted;
   int get speedTolerance => _speedTolerance;
@@ -102,6 +110,12 @@ class SettingsService extends ChangeNotifier {
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _useDynamicPhrases = prefs.getBool(_keyUseDynamicPhrases) ?? true;
+    final alertStyleStr = prefs.getString(_keyVoiceAlertStyle);
+    if (alertStyleStr == VoiceAlertStyle.detailed.name) {
+      _voiceAlertStyle = VoiceAlertStyle.detailed;
+    } else {
+      _voiceAlertStyle = VoiceAlertStyle.concise;
+    }
     _announceStreetChanges = prefs.getBool(_keyAnnounceStreetChanges) ?? true;
     _isMuted = prefs.getBool(_keyIsMuted) ?? false;
     _speedTolerance = prefs.getInt(_keySpeedTolerance) ?? 0;
@@ -141,6 +155,13 @@ class SettingsService extends ChangeNotifier {
     _useDynamicPhrases = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyUseDynamicPhrases, value);
+    notifyListeners();
+  }
+
+  Future<void> setVoiceAlertStyle(VoiceAlertStyle style) async {
+    _voiceAlertStyle = style;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyVoiceAlertStyle, style.name);
     notifyListeners();
   }
 
@@ -323,6 +344,7 @@ class SettingsService extends ChangeNotifier {
   Map<String, dynamic> exportSettings() {
     return {
       _keyUseDynamicPhrases: _useDynamicPhrases,
+      _keyVoiceAlertStyle: _voiceAlertStyle.name,
       _keyAnnounceStreetChanges: _announceStreetChanges,
       _keyIsMuted: _isMuted,
       _keySpeedTolerance: _speedTolerance,
@@ -366,6 +388,15 @@ class SettingsService extends ChangeNotifier {
       if (map.containsKey(_keyUseDynamicPhrases)) {
         _useDynamicPhrases = map[_keyUseDynamicPhrases] == true;
         await prefs.setBool(_keyUseDynamicPhrases, _useDynamicPhrases);
+      }
+      if (map.containsKey(_keyVoiceAlertStyle)) {
+        final val = map[_keyVoiceAlertStyle] as String?;
+        if (val == VoiceAlertStyle.detailed.name) {
+          _voiceAlertStyle = VoiceAlertStyle.detailed;
+        } else {
+          _voiceAlertStyle = VoiceAlertStyle.concise;
+        }
+        await prefs.setString(_keyVoiceAlertStyle, _voiceAlertStyle.name);
       }
       if (map.containsKey(_keyAnnounceStreetChanges)) {
         _announceStreetChanges = map[_keyAnnounceStreetChanges] == true;

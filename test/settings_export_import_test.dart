@@ -20,11 +20,13 @@ void main() {
       expect(map['audio_ducking'], true);
       expect(map['lookahead_alerts'], true);
       expect(map['lookahead_distance_meters'], 70.0);
+      expect(map['voice_alert_style'], 'concise');
       expect(map['app_version'], SettingsService.appVersion);
 
       final jsonStr = settings.exportJsonString();
       expect(jsonStr.contains('"road_search_radius_meters": 40.0'), true);
       expect(jsonStr.contains('"audio_ducking": true'), true);
+      expect(jsonStr.contains('"voice_alert_style": "concise"'), true);
     });
 
     test('imports modified settings and persists them', () async {
@@ -38,7 +40,8 @@ void main() {
         "street_change_confirmations": 6,
         "prioritize_pedestrian_cycleways": true,
         "audio_ducking": false,
-        "lookahead_distance_meters": 85.0
+        "lookahead_distance_meters": 85.0,
+        "voice_alert_style": "detailed"
       }
       ''';
 
@@ -50,6 +53,7 @@ void main() {
       expect(settings.prioritizePedestrianAndCycleways, true);
       expect(settings.audioDucking, false);
       expect(settings.lookaheadDistanceMeters, 85.0);
+      expect(settings.voiceAlertStyle, VoiceAlertStyle.detailed);
 
       // Verify that reloading from SharedPreferences retains imported values
       final freshSettings = SettingsService();
@@ -60,6 +64,7 @@ void main() {
       expect(freshSettings.prioritizePedestrianAndCycleways, true);
       expect(freshSettings.audioDucking, false);
       expect(freshSettings.lookaheadDistanceMeters, 85.0);
+      expect(freshSettings.voiceAlertStyle, VoiceAlertStyle.detailed);
     });
 
     test('handles invalid JSON gracefully', () async {

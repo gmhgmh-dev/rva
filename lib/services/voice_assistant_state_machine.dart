@@ -38,8 +38,10 @@ class VoiceAssistantStateMachine {
   int? _lastLookaheadAlertedLimit;
   DateTime? _lastTrafficCalmingAlertTime;
   DateTime? _lastSpeedCameraAlertTime;
+  String? _lastAlertedStreetName;
   bool announceStreetChanges;
   bool useDynamicPhrases;
+  VoiceAlertStyle alertStyle;
 
   VoiceAssistantStateMachine({
     int? initialMaxSpeed = 50,
@@ -47,6 +49,7 @@ class VoiceAssistantStateMachine {
     String? initialStreetName,
     this.announceStreetChanges = false,
     this.useDynamicPhrases = false,
+    this.alertStyle = VoiceAlertStyle.concise,
   })  : _currentMaxSpeed = initialMaxSpeed,
         _isOneWay = initialIsOneWay,
         _currentStreetName = initialStreetName,
@@ -101,6 +104,7 @@ class VoiceAssistantStateMachine {
     _lastLookaheadAlertedLimit = null;
     _lastTrafficCalmingAlertTime = null;
     _lastSpeedCameraAlertTime = null;
+    _lastAlertedStreetName = null;
   }
 
   /// Returns a cleaned street name if valid, or null if unnamed / generic driveway.
@@ -173,6 +177,105 @@ class VoiceAssistantStateMachine {
       return 'Ātruma ierobežojums ir beidzies. $validName.';
     } else {
       return 'Ātruma ierobežojums ir beidzies.';
+    }
+  }
+
+  /// Formats one-way entrance announcement for both concise and detailed styles.
+  /// On the same street:
+  /// - concise: "Vienvirziena posms." (vai "Vienvirziena posms, [maxSpeed] kilometri stundā.")
+  /// - detailed: "Sākas vienvirziena posms." (vai "Sākas vienvirziena posms, atļautais ātrums [maxSpeed] kilometri stundā.")
+  /// On a new street / turn:
+  /// - concise: "[StreetName]. Vienvirziena iela." (vai "[StreetName]. Vienvirziena, [maxSpeed] kilometri stundā.")
+  /// - detailed: "Nogriezāties uz [StreetName]. Vienvirziena iela." (vai "Nogriezāties uz [StreetName]. Vienvirziena iela, atļautais ātrums [maxSpeed] kilometri stundā.")
+  static String formatOneWayAnnouncement({
+    String? streetName,
+    required bool isSameStreet,
+    int? maxSpeed,
+    VoiceAlertStyle style = VoiceAlertStyle.concise,
+  }) {
+    final validName = cleanStreetName(streetName);
+    final hasReducedSpeed = (maxSpeed != null && maxSpeed < 50);
+
+    if (isSameStreet || validName == null) {
+      if (style == VoiceAlertStyle.concise) {
+        if (hasReducedSpeed) {
+          return 'Vienvirziena posms, $maxSpeed kilometri stundā.';
+        }
+        return 'Vienvirziena posms.';
+      } else {
+        if (hasReducedSpeed) {
+          return 'Sākas vienvirziena posms, atļautais ātrums $maxSpeed kilometri stundā.';
+        }
+        return 'Sākas vienvirziena posms.';
+      }
+    } else {
+      // New street / turn onto one-way street
+      if (style == VoiceAlertStyle.concise) {
+        if (hasReducedSpeed) {
+          return '$validName. Vienvirziena, $maxSpeed kilometri stundā.';
+        }
+        return '$validName. Vienvirziena iela.';
+      } else {
+        if (hasReducedSpeed) {
+          return 'Nogriezāties uz $validName. Vienvirziena iela, atļautais ātrums $maxSpeed kilometri stundā.';
+        }
+        return 'Nogriezāties uz $validName. Vienvirziena iela.';
+      }
+    }
+  }
+
+  /// Formats one-way exit announcement when a one-way segment ends on the same street.
+  /// - concise: "Vienvirziena posms ir beidzies. Divvirzienu satiksme."
+  /// - detailed: "Vienvirziena posms ir beidzies. Atjaunota divvirzienu satiksme."
+  static String formatOneWayExitedAnnouncement({
+    String? streetName,
+    required bool isSameStreet,
+    VoiceAlertStyle style = VoiceAlertStyle.concise,
+  }) {
+    if (style == VoiceAlertStyle.concise) {
+      return 'Vienvirziena posms ir beidzies. Divvirzienu satiksme.';
+    } else {
+      return 'Vienvirziena posms ir beidzies. Atjaunota divvirzienu satiksme.';
+    }
+  }
+
+  /// Formats announcement when confirming a turn onto a new street.
+  /// In concise mode:
+  /// - "[StreetName]." if standard speed (50 km/h)
+  /// - "[StreetName], [maxSpeed] kilometri stundā." if reduced speed
+  /// In detailed mode:
+  /// - "Nogriezāties uz [StreetName]." if standard speed
+  /// - "Nogriezāties uz [StreetName], atļautais ātrums [maxSpeed] kilometri stundā." if reduced speed
+  static String formatStreetChangeAnnouncement({
+    required String streetName,
+    required int maxSpeed,
+    required VoiceAlertStyle style,
+  }) {
+    final validName = cleanStreetName(streetName);
+    if (validName != null) {
+      if (style == VoiceAlertStyle.concise) {
+        if (maxSpeed < 50) {
+          return '$validName, $maxSpeed kilometri stundā.';
+        }
+        return '$validName.';
+      } else {
+        if (maxSpeed < 50) {
+          return 'Nogriezāties uz $validName, atļautais ātrums $maxSpeed kilometri stundā.';
+        }
+        return 'Nogriezāties uz $validName.';
+      }
+    } else {
+      if (style == VoiceAlertStyle.concise) {
+        if (maxSpeed < 50) {
+          return 'Ātruma ierobežojums $maxSpeed kilometri stundā.';
+        }
+        return '';
+      } else {
+        if (maxSpeed < 50) {
+          return 'Atrodaties uz neidentificēta ceļa. Atļautais ātrums $maxSpeed kilometri stundā.';
+        }
+        return 'Atrodaties uz neidentificēta ceļa.';
+      }
     }
   }
 
@@ -422,6 +525,9 @@ class VoiceAssistantStateMachine {
                     isSameStreet: isSame,
                   )
                 : 'Samazināts ātruma ierobežojums: $effectiveSpeed kilometri stundā.';
+            if (!isSame && streetName != null) {
+              _lastAlertedStreetName = cleanStreetName(streetName);
+            }
             events.add(
               VoiceAlertEvent(
                 type: VoiceAlertType.speedReduced,
@@ -493,32 +599,92 @@ class VoiceAssistantStateMachine {
         // TRIGERIS 3: Ja auto no divvirzienu ielas iebrauc vienvirziena ielā (oneway == true)
         _isOneWay = true;
         _pendingOneWayExitConfirmations = 0;
-        events.add(
-          VoiceAlertEvent(
-            type: VoiceAlertType.oneWayEntered,
-            spokenText: 'Jūs atrodaties uz vienvirziena ielas.',
-            timestamp: now,
-            speedLimitKmh: _currentMaxSpeed,
-            isOneWay: true,
+
+        final isSame = areSameStreets(_currentStreetName, streetName);
+        if (useDynamicPhrases) {
+          // Smart Fusion: Check if speedReduced was just emitted in Section 2 for this point
+          final speedReducedIdx = events.indexWhere((e) => e.type == VoiceAlertType.speedReduced);
+          int? fusedSpeed;
+          if (speedReducedIdx != -1) {
+            fusedSpeed = events[speedReducedIdx].speedLimitKmh;
+            events.removeAt(speedReducedIdx); // Fused into one-way announcement!
+          } else if (effectiveSpeed != null && effectiveSpeed < 50) {
+            fusedSpeed = effectiveSpeed;
+          }
+
+          final spoken = formatOneWayAnnouncement(
             streetName: streetName,
-          ),
-        );
+            isSameStreet: isSame,
+            maxSpeed: fusedSpeed,
+            style: alertStyle,
+          );
+
+          if (!isSame && streetName != null) {
+            _lastAlertedStreetName = cleanStreetName(streetName);
+          }
+
+          events.add(
+            VoiceAlertEvent(
+              type: VoiceAlertType.oneWayEntered,
+              spokenText: spoken,
+              timestamp: now,
+              speedLimitKmh: fusedSpeed ?? _currentMaxSpeed,
+              isOneWay: true,
+              streetName: streetName,
+            ),
+          );
+        } else {
+          events.add(
+            VoiceAlertEvent(
+              type: VoiceAlertType.oneWayEntered,
+              spokenText: 'Jūs atrodaties uz vienvirziena ielas.',
+              timestamp: now,
+              speedLimitKmh: _currentMaxSpeed,
+              isOneWay: true,
+              streetName: streetName,
+            ),
+          );
+        }
       } else if (_isOneWay && !newIsOneWay) {
         // TRIGERIS 4: Ja auto izbrauc no vienvirziena ielas atpakaļ divvirzienu ielā (oneway == false)
         _pendingOneWayExitConfirmations++;
         if (_pendingOneWayExitConfirmations >= oneWayExitConfirmations) {
           _isOneWay = false;
           _pendingOneWayExitConfirmations = 0;
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.oneWayExited,
-              spokenText: 'Vienvirziena iela ir beigusies.',
-              timestamp: now,
-              speedLimitKmh: _currentMaxSpeed,
-              isOneWay: false,
-              streetName: streetName,
-            ),
-          );
+
+          final isSame = areSameStreets(_currentStreetName, streetName);
+          if (useDynamicPhrases) {
+            if (isSame) {
+              final spoken = formatOneWayExitedAnnouncement(
+                streetName: streetName,
+                isSameStreet: true,
+                style: alertStyle,
+              );
+              events.add(
+                VoiceAlertEvent(
+                  type: VoiceAlertType.oneWayExited,
+                  spokenText: spoken,
+                  timestamp: now,
+                  speedLimitKmh: _currentMaxSpeed,
+                  isOneWay: false,
+                  streetName: streetName,
+                ),
+              );
+            }
+            // If !isSame, driver turned onto a new two-way street; suppress exit alert
+            // as Section 4 will naturally announce the new street!
+          } else {
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.oneWayExited,
+                spokenText: 'Vienvirziena iela ir beigusies.',
+                timestamp: now,
+                speedLimitKmh: _currentMaxSpeed,
+                isOneWay: false,
+                streetName: streetName,
+              ),
+            );
+          }
         }
       } else if (_isOneWay && newIsOneWay) {
         _pendingOneWayExitConfirmations = 0;
@@ -603,22 +769,37 @@ class VoiceAssistantStateMachine {
                   e.type == VoiceAlertType.livingStreetEntered ||
                   e.type == VoiceAlertType.speedReduced ||
                   e.type == VoiceAlertType.speedRestored ||
-                  e.type == VoiceAlertType.pedestrianOrBicycleWayEntered);
+                  e.type == VoiceAlertType.pedestrianOrBicycleWayEntered ||
+                  e.type == VoiceAlertType.oneWayEntered);
 
-              if (!alreadyHasAlert) {
-                events.add(
-                  VoiceAlertEvent(
-                    type: VoiceAlertType.streetChanged,
-                    spokenText: formatStreetAnnouncement(
+              final alreadyAnnouncedThisStreet = (_lastAlertedStreetName != null &&
+                  cleanStreetName(_lastAlertedStreetName) == cleanStreetName(normalizedNewStreet));
+
+              if (!alreadyHasAlert && !alreadyAnnouncedThisStreet) {
+                _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
+                final spoken = useDynamicPhrases
+                    ? formatStreetChangeAnnouncement(
+                        streetName: normalizedNewStreet,
+                        maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+                        style: alertStyle,
+                      )
+                    : formatStreetAnnouncement(
+                        streetName: normalizedNewStreet,
+                        maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+                      );
+
+                if (spoken.isNotEmpty) {
+                  events.add(
+                    VoiceAlertEvent(
+                      type: VoiceAlertType.streetChanged,
+                      spokenText: spoken,
+                      timestamp: now,
+                      speedLimitKmh: effectiveSpeed ?? _currentMaxSpeed ?? 50,
+                      isOneWay: _isOneWay,
                       streetName: normalizedNewStreet,
-                      maxSpeed: effectiveSpeed ?? _currentMaxSpeed ?? 50,
                     ),
-                    timestamp: now,
-                    speedLimitKmh: effectiveSpeed ?? _currentMaxSpeed ?? 50,
-                    isOneWay: _isOneWay,
-                    streetName: normalizedNewStreet,
-                  ),
-                );
+                  );
+                }
               }
             }
           }

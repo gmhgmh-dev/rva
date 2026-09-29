@@ -62,6 +62,7 @@ class DrivingAssistantManager extends ChangeNotifier {
         VoiceAssistantStateMachine(
           announceStreetChanges: this.settingsService.announceStreetChanges,
           useDynamicPhrases: this.settingsService.useDynamicPhrases,
+          alertStyle: this.settingsService.voiceAlertStyle,
         );
         
     this.settingsService.addListener(_onSettingsChanged);
@@ -70,6 +71,7 @@ class DrivingAssistantManager extends ChangeNotifier {
   void _onSettingsChanged() {
     stateMachine.announceStreetChanges = settingsService.announceStreetChanges;
     stateMachine.useDynamicPhrases = settingsService.useDynamicPhrases;
+    stateMachine.alertStyle = settingsService.voiceAlertStyle;
     _isMuted = settingsService.isMuted;
     
     realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;

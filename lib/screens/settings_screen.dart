@@ -224,10 +224,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             _buildSwitch(
               title: 'Dinamiskās frāzes',
-              subtitle: 'Izrunā pilnus teikumus ar ātruma vienībām, nevis lakoniskus paziņojumus.',
+              subtitle: 'Izrunā teikumus atbilstoši ceļa situācijai un izvēlētajam stilam.',
               value: settings.useDynamicPhrases,
               onChanged: (val) => settings.setUseDynamicPhrases(val),
             ),
+            if (settings.useDynamicPhrases) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Balss paziņojumu stils',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<VoiceAlertStyle>(
+                value: settings.voiceAlertStyle,
+                dropdownColor: const Color(0xFF1E222B),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF1E222B),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: VoiceAlertStyle.concise,
+                    child: Text('Lakoniskais ("Kuldīgas iela. Vienvirziena iela.")'),
+                  ),
+                  DropdownMenuItem(
+                    value: VoiceAlertStyle.detailed,
+                    child: Text('Paplašinātais ("Nogriezāties uz Kuldīgas iela...")'),
+                  ),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    settings.setVoiceAlertStyle(val);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
             _buildSwitch(
               title: 'Paziņot ielu nosaukumus',
               subtitle: 'Nosauc ielas nosaukumu pie katras krustojuma/ielas maiņas.',

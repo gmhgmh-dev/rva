@@ -86,7 +86,7 @@ void main() {
     expect(find.text('Sofijas iela'), findsOneWidget);
     expect(
       fakeTts.spokenTexts,
-      contains('Jūs atrodaties uz vienvirziena ielas.'),
+      contains('Sofijas iela. Vienvirziena, 30 kilometri stundā.'),
     );
 
     await manager.stop();

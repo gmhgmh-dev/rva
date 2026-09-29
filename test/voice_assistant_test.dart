@@ -1002,4 +1002,296 @@ void main() {
       expect(stateMachine.pendingStreetDistanceMeters, equals(0.0));
     });
   });
+
+  group('Configurable Voice Alert Styles & Smart One-Way Fusion Tests', () {
+    test('Concise style: turning onto a 50 km/h one-way street', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      final oneWayEvents = events.where((e) => e.type == VoiceAlertType.oneWayEntered).toList();
+      expect(oneWayEvents.length, equals(1));
+      expect(oneWayEvents.first.spokenText, equals('Kuldīgas iela. Vienvirziena iela.'));
+
+      // After driving 40m, streetChanged should be suppressed to avoid duplicate alert
+      final step2 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39836,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 4)),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      expect(step2.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+    });
+
+    test('Concise style: turning onto a 30 km/h one-way street fuses speed and one-way', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      // Should be fused into a single announcement
+      expect(events.where((e) => e.type == VoiceAlertType.speedReduced), isEmpty);
+      final oneWayEvents = events.where((e) => e.type == VoiceAlertType.oneWayEntered).toList();
+      expect(oneWayEvents.length, equals(1));
+      expect(oneWayEvents.first.spokenText, equals('Kuldīgas iela. Vienvirziena, 30 kilometri stundā.'));
+    });
+
+    test('Concise style: one-way segment start and end on the SAME street', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // 1. One-way segment starts on Kuldīgas iela
+      final enterEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(enterEvents.length, equals(1));
+      expect(enterEvents.first.type, equals(VoiceAlertType.oneWayEntered));
+      expect(enterEvents.first.spokenText, equals('Vienvirziena posms.'));
+
+      // 2. One-way segment ends on Kuldīgas iela
+      final exitEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39810,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+      );
+      final oneWayExit = exitEvents.where((e) => e.type == VoiceAlertType.oneWayExited).toList();
+      expect(oneWayExit.length, equals(1));
+      expect(oneWayExit.first.spokenText, equals('Vienvirziena posms ir beidzies. Divvirzienu satiksme.'));
+    });
+
+    test('Concise style: normal two-way street change announces street name concisely', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39836,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now().add(const Duration(seconds: 4)),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+
+      final changeEvents = events.where((e) => e.type == VoiceAlertType.streetChanged).toList();
+      expect(changeEvents.length, equals(1));
+      expect(changeEvents.first.spokenText, equals('Lielais prospekts.'));
+    });
+
+    test('Detailed style: turning onto a 50 km/h one-way street', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      final oneWayEvents = events.where((e) => e.type == VoiceAlertType.oneWayEntered).toList();
+      expect(oneWayEvents.length, equals(1));
+      expect(oneWayEvents.first.spokenText, equals('Nogriezāties uz Kuldīgas iela. Vienvirziena iela.'));
+    });
+
+    test('Detailed style: turning onto a 30 km/h one-way street fuses speed and turn announcement', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(events.where((e) => e.type == VoiceAlertType.speedReduced), isEmpty);
+      final oneWayEvents = events.where((e) => e.type == VoiceAlertType.oneWayEntered).toList();
+      expect(oneWayEvents.length, equals(1));
+      expect(oneWayEvents.first.spokenText, equals('Nogriezāties uz Kuldīgas iela. Vienvirziena iela, atļautais ātrums 30 kilometri stundā.'));
+    });
+
+    test('Detailed style: one-way segment start and end on the SAME street', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      final enterEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: true,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(enterEvents.length, equals(1));
+      expect(enterEvents.first.spokenText, equals('Sākas vienvirziena posms.'));
+
+      // End of segment
+      final exitEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39810,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+      );
+      final oneWayExit = exitEvents.where((e) => e.type == VoiceAlertType.oneWayExited).toList();
+      expect(oneWayExit.length, equals(1));
+      expect(oneWayExit.first.spokenText, equals('Vienvirziena posms ir beidzies. Atjaunota divvirzienu satiksme.'));
+    });
+
+    test('Detailed style: normal two-way street change announces Nogriezāties uz [Iela]', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39836,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now().add(const Duration(seconds: 4)),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+
+      final changeEvents = events.where((e) => e.type == VoiceAlertType.streetChanged).toList();
+      expect(changeEvents.length, equals(1));
+      expect(changeEvents.first.spokenText, equals('Nogriezāties uz Lielais prospekts.'));
+    });
+  });
 }
