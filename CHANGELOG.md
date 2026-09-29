@@ -9,31 +9,48 @@ Formāts balstīts uz [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) u
 ## [0.2.1] - 2026-09-29
 
 ### Pievienots / Uzlabots (Added / Improved)
+- **Audio Ducking (Mūzikas pieklusināšana):**
+  - Integrēts `AudioDuckingService` ar Android `AudioManager` un `AudioFocusRequest` (`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`).
+  - Automātiski pieklusina automašīnas radio, Spotify, YouTube Music vai citas multivides lietotnes balss paziņojuma laikā un atjauno pilnu skaļumu pēc tā beigām.
+  - Pievienots pārslēgšanas slēdzis lietotnes iestatījumos (`Mūzikas pieklusināšana (Audio ducking)`).
+- **Apsteidzošā ātruma zonu noteikšana (Lookahead projekcija 50–100 m):**
+  - Dinamisks lookahead koordinātu aprēķins (`calculateLookaheadCoordinate`, `calculateDynamicLookaheadDistance`) atkarībā no braukšanas ātruma (~4.5 sekundes uz priekšu, 35–120 m).
+  - Savlaicīgi paziņo par gaidāmo 30 km/h vai dzīvojamo (20 km/h) zonu pirms iebraukšanas tajā (*"Uzmanību, priekšā 30 kilometru stundā zona"*).
+  - Iestatījumos pieejams slēdzis un pielāgojams bāzes distances slīdnis (30–150 m, noklusējums: **70 m**).
+- **Ātrumvaļņu (traffic_calming) un fotoradaru bezsaistes brīdinājumi:**
+  - Bezsaistes PMTiles MVT datu slāņa paplašinājums ar `traffic_calming` (guļošie policisti, paaugstinātās pārejas) un stacionāro fotoradaru detekciju.
+  - Balss brīdinājumi: *"Uzmanību, priekšā ātrumvalnis"*, *"Uzmanību, priekšā fotoradars [X] km/h"*.
+  - Pārslēdzami iestatījumos ar slēdžiem.
+- **Krustojumu virziena leņķa sods ($12\times$) un afinitāte ($0.15\times$):**
+  - $12\times$ virziena leņķa sods perpendikulārām šķērsielām ($> 55^\circ$) un $0.15\times$ afinitāte pašreizējai braukšanas ielai.
+  - Pilnībā novērš viltus pārslēgšanos uz šķērsielām, šķērsojot krustojumus (piem., Katoļu/Jūras iela, Ganību/Kārļa iela).
 - **Krustojumu pret-spama aizture (Ielas maiņas histerēze):**
   - Ieviests daudzpakāpju apstiprināšanas slieksnis (noklusējums: **4 punkti / ~4s**).
-  - Asistents ziņo par jaunu ielu tikai tad, kad transportlīdzeklis reāli pārvietojas pa to vairākus secīgus GPS ciklus, pilnībā novēršot īslaicīgu šķērsielu spamu krustojumos (piem., Ganību/Kārļa iela).
+  - Asistents ziņo par jaunu ielu tikai tad, kad transportlīdzeklis reāli pārvietojas pa to vairākus secīgus GPS ciklus.
 - **Ātruma atcelšanas histerēze uz vienas ielas:**
   - Ieviests slieksnis (noklusējums: **4 punkti / ~4s**) pārejai no zemāka ātruma (30/20 km/h) atpakaļ uz 50 km/h tajā pašā ielā.
-  - Pilnībā novērš 30 km/h un 50 km/h zonu mirgošanu ielās ar mainīgu ātrumu (piem., Sarkanmuižas dambis).
+  - Novērš 30 km/h un 50 km/h zonu mirgošanu ielās ar mainīgu ātrumu (piem., Sarkanmuižas dambis).
 - **Vienvirziena ielas beigu aizture:**
-  - Ieviests slieksnis (noklusējums: **3 punkti**) pirms paziņojuma *"Vienvirziena iela ir beigusies"*, novēršot viltus trauksmes krustojumu sadalījumos, kur uz mirkli nav `oneway` taga.
+  - Ieviests slieksnis (noklusējums: **3 punkti**) pirms paziņojuma *"Vienvirziena iela ir beigusies"*.
 - **Starta GPS kešatmiņas filtrs:**
   - Noraida vēsturiskos GPS punktus no sistēmas keša (`getLastKnownPosition`), kuru vecums pārsniedz **5 sekundes**, un noraida punktus ar nepareizu hronoloģisko secību.
 - **Veloceļu un ietvju prioritātes režīms:**
   - Pievienota opcija velosipēdu un skrejriteņu braucējiem prioritizēt paralēlos veloceļus un ietves $\le 20\text{ m}$ attālumā pār auto brauktuvēm.
 - **Procentuālā ātruma tolerance:**
-  - Papildus fiksētajai km/h tolerancei ieviests procentuālais režīms (piem., 5% vai 10% no ceļa atļautā ātruma).
-- **Lietotnes iestatījumu sadaļa "GPS stabilitātes un krustojumu filtri":**
-  - Katram stabilitātes un histerēzes parametram pievienots interaktīvs slīdnis, precīzas ciparu ievades dialogs un ātrā atiestatīšanas poga uz ieteikto noklusējumu.
+  - Papildus fiksētajai km/h tolerancei ieviests procentuālais režīms (3% līdz 15% no ceļa atļautā ātruma).
+- **Konfigurācijas pārvaldība (JSON Eksports / Imports) un 1-klikšķa diagnostika:**
+  - Iespēja eksportēt un importēt visus lietotnes parametrus `.json` failā.
+  - Poga diagnostikas pakotnes nosūtīšanai (apvieno pēdējo GPX, trauksmju `.log` un konfigurāciju `.json`).
+- **Sadaļa "Par lietotni" (About Screen):**
+  - Jauns ekrāns ar pilnu versijas numuru (`v0.2.1+3 (Build 3)`), būvējuma datiem, funkciju pārskatu, OpenStreetMap / PMTiles licencēm un 100% bezsaistes privātuma garantiju.
+  - Piekļuve no galvenā ekrāna AppBar `(i)` ikonas un no Iestatījumu saraksta apakšas.
 - **Gemini Pro 3.1 koda audita un stabilitātes labojumi:**
-  - **Wakelock akumulatora aizsardzība:** Ekrāna nomods tiek aktivizēts tikai tad, kad braukšanas asistents ir reāli palaists (`_mode != DriveMode.idle`), un automātiski atslēgts dīkstāvē.
-  - **TTS rindas strupceļa (deadlock) novēršana:** `TtsService` tagad pārbauda `_flutterTts.speak()` rezultātu un atkopjas kļūdu vai atcelšanas gadījumā, neļaujot balss dzinējam uzkārties.
-  - **Peldošā komata drošība ģeometrijas aprēķinos:** `lenSq < 1e-10` slieksnis novērš skaitlisku pārplūdi mikro-distanču dalīšanā.
-  - **Iestatījumu vērtību robežkontrole (`clamping`):** Visi parametri no datu bāzes tiek droši ierobežoti atļautajos diapazonos.
-- **Stāvēšanas filtrs pie luksofora un sastrēgumos (< 3.5 km/h):**
-  - Bloķē ielu maiņu un vienvirziena pārslēgšanos GPS dreifa dēļ stāvošam transportlīdzeklim.
-- **Kursa / braukšanas virziena (heading/bearing) filtrs krustojumos.**
-- **Pārbaudīts ar 59 automatizētajiem testiem (100% pass rate).**
+  - **Wakelock akumulatora aizsardzība:** Ekrāna nomods tiek aktivizēts tikai aktīva brauciena laikā (`_mode != DriveMode.idle`).
+  - **TTS rindas strupceļa (deadlock) novēršana:** Automātiska atkopšanās no dzinēja aiztures.
+  - **Peldošā komata drošība:** `lenSq < 1e-10` slieksnis novērš skaitlisku pārplūdi mikro-distanču dalīšanā.
+  - **Iestatījumu vērtību robežkontrole (`clamping`).**
+  - **Stāvēšanas filtrs pie luksofora (< 3.5 km/h).**
+- **Testēšana:** Visi **69 automatizētie testi** izpildās ar 100% panākumiem.
 
 ---
 
@@ -49,35 +66,15 @@ Formāts balstīts uz [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) u
   - **Ielu meklēšanas rādiuss:** 10–150 m (ieteiktais noklusējums: **40 m**).
   - **Pagalmu un dzīvojamo zonu rādiuss:** 5–40 m (ieteiktais noklusējums: **15 m**).
   - Pievienota ātrā atiestatīšanas poga uz ieteiktajām noklusējuma vērtībām.
-  - Novērš kļūdainu "pieķeršanos" paralēliem pagalmiem, braucot pa ielu 50 km/h.
 - **Gājēju un velosipēdu ceļu detekcija un balss paziņojumi:**
   - Atpazīst velosipēdu un gājēju ceļus kartes datos.
-  - Skaidri balss paziņojumi:
-    - *"Atrodaties uz velosipēdu ceļa."*
-    - *"Atrodaties uz gājēju ceļa."*
-    - *"Atrodaties uz gājēju un velosipēdu ceļa."*
-  - Ieviests slieksnis (debounce) pret nevajadzīgiem paziņojuma atkārtojumiem.
   - Ekrānā pievienota dinamiska vizuāla statusa birka (`Veloceļš` / `Gājēju ceļš`).
-- **Krustojumu aizsardzība pret liekiem paziņojumiem:**
-  - Daudzpakāpju apstiprināšanas filtrs novērš viltus brīdinājumus par perpendikulāro šķērsielu pie īslaicīgām GPS nobīdēm krustojumos.
-  - Pašreizējā ceļa saglabāšanas afinitāte krustojuma šķērsošanas laikā.
 - **GPX failu nolasīšanas un simulācijas atbalsts:**
-  - Pilns atbalsts visiem standarta GPX maršrutu failiem.
-  - Ātruma nolasīšana un automātiska m/s pārrēķināšana uz km/h.
-  - Simulācijas punkti tiek piesaistīti lokālajai kartei pēc lietotāja iestatītajiem rādiusiem.
-  - Testa maršrutu izvēlnē attēlots failu modifikācijas datums, laiks un faila izmērs.
+  - Pilns atbalsts standarta GPX maršrutu failiem ar ātruma nolasīšanu un piesaisti bezsaistes kartei.
 - **Dinamiskie ielu nosaukumi un ātruma zonas:**
   - Dinamiska ielas nosaukuma paziņošana pirms ierobežojuma izrunāšanas ("Atrodaties uz [Ielas nosaukums]").
   - Dzīvojamo zonu (20 km/h) prioritāra atpazīšana un balss brīdinājums pagalmā esošam auto.
-  - 30 km/h zonas kvartālu skaidra nošķiršana no parasta ielas posma.
   - Sākuma ielas un ātruma paziņošana balsī uzreiz pēc GPS signāla uztveršanas.
-- **Droša arhitektūra un testēšana:**
-  - Visi 50 vienībtesti un logrīku testi izpildās ar 100% panākumiem.
-
-### Plānotie uzlabojumi
-- [ ] Vairāku valodu atbalsts balss asistentam un saskarnei (EN/LV).
-- [ ] Paplašināta bīstamo satiksmes punktu brīdināšana (dzelzceļa pārbrauktuves, fotoradari, bīstami krustojumi).
-- [ ] Energoefektivitātes optimizācija ilgstošos starppilsētu braucienos.
 
 ---
 
@@ -88,10 +85,7 @@ Formāts balstīts uz [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) u
   - Android fona pakalpojums stabilai darbībai ar izslēgtu ekrānu.
   - Viedā telpiskā kešatmiņa ar tūlītēju atiestatīšanu, iebraucot vai izbraucot no ātruma zonām.
 - **Bezsaistes vektorkartes dzinējs (`PMTilesService`):**
-  - Tieša kartes nolasīšana ierīcē bez interneta pieslēguma.
-  - Atbalsts atļautajam ātrumam, zonām, vienvirziena ielām un ielu nosaukumiem.
-- **Tiešsaistes kļūmjpārlēce (Fallback):**
-  - Automātiska datu iegūšana no tiešsaistes avotiem, ja bezsaistes karte nav lejupielādēta.
+  - Tieša kartes nolasīšana ierīcē bez interneta pieslēguma (`latvia.pmtiles`).
 - **Kartes lejupielādētājs un iestatījumu ekrāns:**
   - Latvijas kartes lejupielāde tieši lietotnē, progresa indikācija, faila izmērs un datums.
 - **Balss asistents:**
