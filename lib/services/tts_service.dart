@@ -92,7 +92,12 @@ class TtsService {
       if (!_isInitialized) {
         await init();
       }
-      await _flutterTts.speak(text);
+      final result = await _flutterTts.speak(text);
+      if (result != 1) {
+        // Fallback if TTS engine rejects the text immediately
+        _isSpeaking = false;
+        _processQueue();
+      }
     } catch (e) {
       debugPrint('Error speaking text: $e');
       _isSpeaking = false;

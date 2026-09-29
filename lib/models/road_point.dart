@@ -14,6 +14,7 @@ class RoadPoint {
   final bool isCycleway;
   final bool isFootway;
   final bool isPath;
+  final double? heading;
 
   const RoadPoint({
     required this.latitude,
@@ -29,6 +30,7 @@ class RoadPoint {
     this.isCycleway = false,
     this.isFootway = false,
     this.isPath = false,
+    this.heading,
   });
 
   bool get isPedestrianOrBicycle => isCycleway || isFootway || isPath;
@@ -47,6 +49,7 @@ class RoadPoint {
     bool? isCycleway,
     bool? isFootway,
     bool? isPath,
+    double? heading,
   }) {
     return RoadPoint(
       latitude: latitude ?? this.latitude,
@@ -62,6 +65,7 @@ class RoadPoint {
       isCycleway: isCycleway ?? this.isCycleway,
       isFootway: isFootway ?? this.isFootway,
       isPath: isPath ?? this.isPath,
+      heading: heading ?? this.heading,
     );
   }
 

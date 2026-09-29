@@ -110,5 +110,31 @@ void main() {
       expect(road.isPedestrianOrBicycle, isTrue);
       expect(road.name, equals('Gājēju ceļš'));
     });
+
+    test('calculateSegmentBearing calculates correct navigation bearings', () {
+      // In tile coordinates: dx positive East, dy positive South
+      // Segment going North: dx = 0, dy = -10 -> 0 degrees
+      expect(PMTilesService.calculateSegmentBearing(0.0, -10.0), closeTo(0.0, 0.01));
+
+      // Segment going East: dx = 10, dy = 0 -> 90 degrees
+      expect(PMTilesService.calculateSegmentBearing(10.0, 0.0), closeTo(90.0, 0.01));
+
+      // Segment going South: dx = 0, dy = 10 -> 180 degrees
+      expect(PMTilesService.calculateSegmentBearing(0.0, 10.0), closeTo(180.0, 0.01));
+
+      // Segment going West (like Jūras iela): dx = -10, dy = 0 -> 270 degrees
+      expect(PMTilesService.calculateSegmentBearing(-10.0, 0.0), closeTo(270.0, 0.01));
+    });
+
+    test('angleDifference computes undirected difference [0, 90] degrees', () {
+      // Vehicle driving West (272 deg) along Jūras iela (270 deg) -> diff = 2 deg (parallel)
+      expect(PMTilesService.angleDifference(272.0, 270.0), closeTo(2.0, 0.01));
+
+      // Vehicle driving West (272 deg) crossing Aleksandra iela (180 deg) -> diff = 88 deg (perpendicular)
+      expect(PMTilesService.angleDifference(272.0, 180.0), closeTo(88.0, 0.01));
+
+      // Opposite direction on same road: vehicle 270 deg, road 90 deg -> diff = 0 deg (same line axis)
+      expect(PMTilesService.angleDifference(270.0, 90.0), closeTo(0.0, 0.01));
+    });
   });
 }

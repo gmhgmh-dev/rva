@@ -58,6 +58,21 @@ android/local.properties
 # Secrets & Telegram Bridge
 scripts/telegram_bridge.py
 scripts/.telegram_conv_id.json
+scripts/send_manual_report.py
+send_to_telegram.py
+send_uncommitted_release.py
+scripts/send_update_to_telegram.py
+*.apk
+received_logs/
+patch_*.py
+check_*.py
+analyze_*.py
+inspect_*.py
+test_*.py
+simulate_*.py
+fetch_log.py
+fix_encoding.py
+detailed_gpx_analysis.py
 
 # Keystore files
 android/key.properties

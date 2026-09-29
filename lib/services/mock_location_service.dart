@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:xml/xml.dart';
@@ -281,10 +282,35 @@ class MockLocationService {
           ),
         );
       }
+
+      // Compute heading between consecutive points
+      for (var i = 0; i < list.length; i++) {
+        if (i < list.length - 1) {
+          final p1 = list[i];
+          final p2 = list[i + 1];
+          final heading = _calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+          list[i] = list[i].copyWith(heading: heading);
+        } else if (list.length > 1) {
+          list[i] = list[i].copyWith(heading: list[i - 1].heading);
+        }
+      }
     } catch (e) {
       debugPrint('GPX parse error: $e');
     }
     return list;
+  }
+
+  /// Calculates navigation bearing between two GPS coordinates in degrees [0, 360)
+  static double _calculateBearing(double lat1, double lon1, double lat2, double lon2) {
+    const p = math.pi / 180.0;
+    final phi1 = lat1 * p;
+    final phi2 = lat2 * p;
+    final deltaLambda = (lon2 - lon1) * p;
+    final y = math.sin(deltaLambda) * math.cos(phi2);
+    final x = math.cos(phi1) * math.sin(phi2) -
+        math.sin(phi1) * math.cos(phi2) * math.cos(deltaLambda);
+    final bearing = math.atan2(y, x) * 180.0 / math.pi;
+    return (bearing + 360.0) % 360.0;
   }
 
   /// Starts the simulated GPS route playback.

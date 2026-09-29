@@ -159,9 +159,9 @@ void main() {
 
     await tester.runAsync(() async {
       await tester.tap(downloadButton);
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future.delayed(const Duration(milliseconds: 400));
     });
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // After download completed, verify file is created and active
     final file = File('${tempDir.path}/${MapDownloaderService.mapFileName}');

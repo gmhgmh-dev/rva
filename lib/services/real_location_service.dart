@@ -38,6 +38,13 @@ class RealLocationService {
   double roadSearchRadiusMeters = 40.0;
   double courtyardSearchRadiusMeters = 15.0;
   String? currentRoadName;
+  bool filterStaleGpsFixes = true;
+  int staleGpsTimeoutSeconds = 5;
+  bool prioritizePedestrianAndCycleways = false;
+  DateTime? _lastProcessedGpsTime;
+  double? _lastGpsLat;
+  double? _lastGpsLon;
+  double? _lastGpsHeading;
 
   RealLocationService({
     this.pmTilesService,
@@ -63,6 +70,7 @@ class RealLocationService {
     _lastQueriedLat = null;
     _lastQueriedLon = null;
     _lastQueryTime = null;
+    _lastProcessedGpsTime = null;
 
     // Immediately query last known position or current position so the user
     // gets immediate feedback even if stationary in their vehicle.
@@ -130,9 +138,42 @@ class RealLocationService {
   /// Delivers updates with 0-latency to avoid UI freezing, while concurrently
   /// querying Overpass API in the background if offline map is absent.
   Future<void> _handlePositionUpdate(Position position) async {
+    // Filter out stale GPS fixes from Android system cache or out-of-order points
+    if (filterStaleGpsFixes) {
+      final now = DateTime.now();
+      final ageSeconds = now.difference(position.timestamp).inSeconds.abs();
+      if (ageSeconds > staleGpsTimeoutSeconds) {
+        debugPrint('Ignoring stale GPS position from ${position.timestamp} (age: ${ageSeconds}s > ${staleGpsTimeoutSeconds}s)');
+        return;
+      }
+      if (_lastProcessedGpsTime != null && position.timestamp.isBefore(_lastProcessedGpsTime!)) {
+        debugPrint('Ignoring out-of-order GPS position: ${position.timestamp} is before $_lastProcessedGpsTime');
+        return;
+      }
+    }
+    _lastProcessedGpsTime = position.timestamp;
+
     final speedKmh = position.speed > 0 ? (position.speed * 3.6) : 0.0;
     final lat = position.latitude;
     final lon = position.longitude;
+
+    // Calculate heading / bearing
+    double? heading;
+    if (position.heading > 0.0) {
+      heading = position.heading;
+    } else if (_lastGpsLat != null && _lastGpsLon != null && speedKmh > 3.0) {
+      final dist = _distanceMeters(_lastGpsLat!, _lastGpsLon!, lat, lon);
+      if (dist >= 2.0) {
+        heading = _calculateBearing(_lastGpsLat!, _lastGpsLon!, lat, lon);
+      } else {
+        heading = _lastGpsHeading;
+      }
+    }
+    if (heading != null) {
+      _lastGpsHeading = heading;
+    }
+    _lastGpsLat = lat;
+    _lastGpsLon = lon;
 
     // 1. Try local offline PMTiles vector map first (instant, 0ms, fully offline)
     if (pmTilesService != null && pmTilesService!.isLoaded) {
@@ -143,6 +184,9 @@ class RealLocationService {
           maxRadiusMeters: roadSearchRadiusMeters,
           courtyardRadiusMeters: courtyardSearchRadiusMeters,
           currentRoadName: currentRoadName,
+          vehicleHeading: heading,
+          vehicleSpeedKmh: speedKmh,
+          prioritizePedestrianAndCycleways: prioritizePedestrianAndCycleways,
         );
         if (roadAttrs != null) {
           final effectiveSpeed = resolveSpeedLimit(
@@ -162,6 +206,7 @@ class RealLocationService {
             attributes: enrichedAttrs,
             dataSource: 'PMTiles bezsaistes karte',
             timestamp: position.timestamp,
+            heading: heading,
           ));
 
           // If PMTiles tile lacked explicit maxspeed, concurrently query Overpass to verify
@@ -618,6 +663,7 @@ class RealLocationService {
     required RoadAttributes attributes,
     required String dataSource,
     DateTime? timestamp,
+    double? heading,
   }) {
     String street = (attributes.name != null && attributes.name!.trim().isNotEmpty && attributes.name!.trim().toLowerCase() != 'iela')
         ? attributes.name!.trim()
@@ -648,7 +694,21 @@ class RealLocationService {
       isCycleway: attributes.isCycleway,
       isFootway: attributes.isFootway,
       isPath: attributes.isPath,
+      heading: heading,
     );
+  }
+
+  /// Calculates navigation bearing between two GPS coordinates in degrees [0, 360)
+  static double _calculateBearing(double lat1, double lon1, double lat2, double lon2) {
+    const p = math.pi / 180.0;
+    final phi1 = lat1 * p;
+    final phi2 = lat2 * p;
+    final deltaLambda = (lon2 - lon1) * p;
+    final y = math.sin(deltaLambda) * math.cos(phi2);
+    final x = math.cos(phi1) * math.sin(phi2) -
+        math.sin(phi1) * math.cos(phi2) * math.cos(deltaLambda);
+    final bearing = math.atan2(y, x) * 180.0 / math.pi;
+    return (bearing + 360.0) % 360.0;
   }
 
   /// Distance in meters using Haversine formula

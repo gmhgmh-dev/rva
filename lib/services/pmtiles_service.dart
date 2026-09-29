@@ -49,6 +49,9 @@ class PMTilesService {
     double? maxRadiusMeters,
     double? courtyardRadiusMeters,
     String? currentRoadName,
+    double? vehicleHeading,
+    double? vehicleSpeedKmh,
+    bool prioritizePedestrianAndCycleways = false,
   }) async {
     final archive = _archive;
     if (archive == null) {
@@ -109,6 +112,10 @@ class PMTilesService {
       VectorTileFeature? closestLivingFeature;
       int extentLiving = 4096;
 
+      double minPedCycleDistanceSq = double.infinity;
+      VectorTileFeature? closestPedCycleFeature;
+      int extentPedCycle = 4096;
+
       final normalizedCurrentRoad = currentRoadName?.trim().toLowerCase();
 
       for (final layer in roadLayers) {
@@ -121,6 +128,7 @@ class PMTilesService {
 
           final lines = feature.decodeLineString();
           double featureMinDistSq = double.infinity;
+          double bestSegmentBearing = 0.0;
 
           for (final line in lines) {
             for (var i = 0; i < line.length - 1; i++) {
@@ -138,6 +146,9 @@ class PMTilesService {
 
               if (distSq < featureMinDistSq) {
                 featureMinDistSq = distSq;
+                final dx = p2[0].toDouble() - p1[0].toDouble();
+                final dy = p2[1].toDouble() - p1[1].toDouble();
+                bestSegmentBearing = _calculateSegmentBearing(dx, dy);
               }
             }
           }
@@ -150,9 +161,36 @@ class PMTilesService {
 
           final props = feature.decodeProperties();
 
+          // Check if this feature is a pedestrian path or cycleway
+          final rawClass = (props['class']?.value ?? props['highway']?.value)?.toString().toLowerCase() ?? '';
+          final rawSubclass = props['subclass']?.value?.toString().toLowerCase() ?? '';
+          final rawHighway = props['highway']?.value?.toString().toLowerCase() ?? '';
+          final bicycleTag = props['bicycle']?.value?.toString().toLowerCase() ?? '';
+          final footTag = props['foot']?.value?.toString().toLowerCase() ?? '';
+
+          final bool isPedOrCycle = rawClass == 'cycleway' ||
+              rawSubclass == 'cycleway' ||
+              rawHighway == 'cycleway' ||
+              rawClass == 'footway' ||
+              rawSubclass == 'footway' ||
+              rawHighway == 'footway' ||
+              rawClass == 'pedestrian' ||
+              rawHighway == 'pedestrian' ||
+              rawClass == 'path' ||
+              rawSubclass == 'path' ||
+              rawHighway == 'path' ||
+              bicycleTag == 'designated' ||
+              bicycleTag == 'yes' ||
+              footTag == 'designated';
+
+          if (isPedOrCycle && featureMinDistSq < minPedCycleDistanceSq) {
+            minPedCycleDistanceSq = featureMinDistSq;
+            closestPedCycleFeature = feature;
+            extentPedCycle = extent;
+          }
+
           // Check if this feature is a living street (20 km/h)
-          final roadClass = (props['class']?.value ?? props['highway']?.value)?.toString().toLowerCase();
-          final isLiving = roadClass == 'living_street';
+          final isLiving = rawClass == 'living_street';
           if (isLiving && featureMinDistSq < minLivingDistanceSq) {
             minLivingDistanceSq = featureMinDistSq;
             closestLivingFeature = feature;
@@ -166,14 +204,30 @@ class PMTilesService {
               props.containsKey('name:en') ||
               props.containsKey('ref');
 
-          // Sticky bias at intersections: if this feature is the current road,
-          // give it an affinity advantage to avoid flickering to perpendicular cross-streets.
-          double effectiveDistSq = featureMinDistSq;
-          if (normalizedCurrentRoad != null && hasName) {
-            final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value.toString().trim().toLowerCase();
-            if (fName != null && fName == normalizedCurrentRoad) {
-              effectiveDistSq = featureMinDistSq * 0.35; // Sticky current road affinity
+          // Directional angle check: if the vehicle is actively moving (> 5 km/h),
+          // compare vehicle heading with this road segment's orientation.
+          double headingPenalty = 1.0;
+          if (vehicleHeading != null && vehicleSpeedKmh != null && vehicleSpeedKmh > 5.0) {
+            final angleDiff = _angleDifference(vehicleHeading, bestSegmentBearing);
+            if (angleDiff > 55.0) {
+              // Perpendicular cross-street! Penalize heavily unless already on this street
+              headingPenalty = 8.0;
+            } else if (angleDiff < 30.0) {
+              // Vehicle heading closely aligns with this road segment
+              headingPenalty = 0.6;
             }
+          }
+
+          final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value.toString().trim().toLowerCase();
+          final isCurrentRoad = normalizedCurrentRoad != null && fName != null && fName == normalizedCurrentRoad;
+
+          // Sticky bias at intersections: if this feature is the current road,
+          // give it strong affinity advantage to avoid flickering to perpendicular cross-streets.
+          double effectiveDistSq = featureMinDistSq;
+          if (isCurrentRoad) {
+            effectiveDistSq = featureMinDistSq * 0.20; // Strong current road affinity
+          } else {
+            effectiveDistSq = featureMinDistSq * headingPenalty;
           }
 
           if (hasName && effectiveDistSq < minNamedDistanceSq) {
@@ -184,18 +238,21 @@ class PMTilesService {
         }
       }
 
-      if (closestAnyFeature == null && closestNamedFeature == null && closestLivingFeature == null) {
+      if (closestAnyFeature == null &&
+          closestNamedFeature == null &&
+          closestLivingFeature == null &&
+          closestPedCycleFeature == null) {
         return null;
       }
 
-      // 1. High Priority: If within courtyardSearchRadius of a living street (20 km/h), prioritize it!
-      if (closestLivingFeature != null && minLivingDistanceSq != double.infinity) {
-        final metersPerPixelLiving = (cos(rad) * 40075016.686) / (n * extentLiving);
-        final distLivingMeters = sqrt(minLivingDistanceSq) * metersPerPixelLiving;
+      // 0. High Priority for Pedestrian / Cycleway when enabled (e.g. e-scooter or bicycle ride):
+      if (prioritizePedestrianAndCycleways && closestPedCycleFeature != null && minPedCycleDistanceSq != double.infinity) {
+        final metersPerPixelPedCycle = (cos(rad) * 40075016.686) / (n * extentPedCycle);
+        final distPedCycleMeters = sqrt(minPedCycleDistanceSq) * metersPerPixelPedCycle;
 
-        if (distLivingMeters <= effectiveCourtyardRadius) {
-          final props = closestLivingFeature.decodeProperties();
-          return _extractRoadAttributes(props, distLivingMeters);
+        if (distPedCycleMeters <= effectiveCourtyardRadius || distPedCycleMeters <= 20.0) {
+          final props = closestPedCycleFeature.decodeProperties();
+          return _extractRoadAttributes(props, distPedCycleMeters);
         }
       }
 
@@ -212,11 +269,35 @@ class PMTilesService {
         distAnyMeters = sqrt(minAnyDistanceSq) * metersPerPixelAny;
       }
 
+      // If the vehicle is currently on an established named road (primary/secondary/tertiary/residential)
+      // and still within reasonable distance (<= 25m), do NOT snap into an adjacent courtyard driveway!
+      final bool onEstablishedNamedRoad = normalizedCurrentRoad != null &&
+          normalizedCurrentRoad.isNotEmpty &&
+          normalizedCurrentRoad != 'dzīvojamā zona' &&
+          normalizedCurrentRoad != 'pagalma brauktuve' &&
+          normalizedCurrentRoad != 'pilsētas ceļš';
+
+      // 1. High Priority: If within courtyardSearchRadius of a living street (20 km/h), prioritize it!
+      // But only if not already driving along an established named road within 20m.
+      if (closestLivingFeature != null && minLivingDistanceSq != double.infinity) {
+        final metersPerPixelLiving = (cos(rad) * 40075016.686) / (n * extentLiving);
+        final distLivingMeters = sqrt(minLivingDistanceSq) * metersPerPixelLiving;
+
+        if (distLivingMeters <= effectiveCourtyardRadius) {
+          if (!onEstablishedNamedRoad || distNamedMeters > 20.0) {
+            final props = closestLivingFeature.decodeProperties();
+            return _extractRoadAttributes(props, distLivingMeters);
+          }
+        }
+      }
+
       // 2. If the vehicle is within courtyardSearchRadius to a courtyard driveway or residential way,
-      // and the closest named road is significantly further away (> 30m), stay on the courtyard/service way.
-      if (distAnyMeters <= effectiveCourtyardRadius && distNamedMeters > 30.0 && closestAnyFeature != null) {
-        final props = closestAnyFeature.decodeProperties();
-        return _extractRoadAttributes(props, distAnyMeters);
+      // and the closest named road is significantly further away (> 25m), stay on the courtyard/service way.
+      if (distAnyMeters <= effectiveCourtyardRadius && distNamedMeters > 25.0 && closestAnyFeature != null) {
+        if (!onEstablishedNamedRoad || distNamedMeters > 25.0) {
+          final props = closestAnyFeature.decodeProperties();
+          return _extractRoadAttributes(props, distAnyMeters);
+        }
       }
 
       // 3. Otherwise, check if closest named feature is within roadSearchRadius
@@ -251,7 +332,7 @@ class PMTilesService {
     final dy = y2 - y1;
     final lenSq = dx * dx + dy * dy;
 
-    if (lenSq == 0.0) {
+    if (lenSq < 1e-10) {
       final dpx = px - x1;
       final dpy = py - y1;
       return dpx * dpx + dpy * dpy;
@@ -415,4 +496,27 @@ class PMTilesService {
     double distanceMeters,
   ) =>
       _extractRoadAttributes(props, distanceMeters);
+
+  /// Calculates navigation bearing in degrees [0, 360) for a vector line segment.
+  /// In tile coordinates: dx positive East, dy positive South.
+  /// Bearing: 0 deg North, 90 deg East, 180 deg South, 270 deg West.
+  static double _calculateSegmentBearing(double dx, double dy) {
+    final rad = atan2(dx, -dy);
+    return (rad * 180.0 / pi + 360.0) % 360.0;
+  }
+
+  /// Calculates undirected angle difference in degrees [0, 90] between two bearings.
+  static double _angleDifference(double heading1, double heading2) {
+    double diff = (heading1 - heading2).abs() % 180.0;
+    if (diff > 90.0) {
+      diff = 180.0 - diff;
+    }
+    return diff;
+  }
+
+  @visibleForTesting
+  static double calculateSegmentBearing(double dx, double dy) => _calculateSegmentBearing(dx, dy);
+
+  @visibleForTesting
+  static double angleDifference(double heading1, double heading2) => _angleDifference(heading1, heading2);
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/driving_assistant_manager.dart';
 import '../services/map_downloader_service.dart';
+import '../services/settings_service.dart';
 
 /// Settings screen managing the offline Latvia PMTiles vector map.
 class SettingsScreen extends StatefulWidget {
@@ -262,31 +263,181 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Ātruma pārsniegšanas tolerance',
-              style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+              'Ātruma tolerances režīms',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<int>(
-              value: settings.speedTolerance,
-              dropdownColor: const Color(0xFF1E222B),
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: const Color(0xFF1E222B),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            const SizedBox(height: 4),
+            const Text(
+              'Izvēlieties statisku slieksni (+km/h) vai progresīvu procentuālo slieksni (lielākiem ātrumiem lielāka pielaide).',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E222B),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF2C323F)),
               ),
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('+0 km/h (Stingrs)')),
-                DropdownMenuItem(value: 3, child: Text('+3 km/h')),
-                DropdownMenuItem(value: 5, child: Text('+5 km/h')),
-                DropdownMenuItem(value: 10, child: Text('+10 km/h')),
-              ],
-              onChanged: (val) {
-                if (val != null) {
-                  settings.setSpeedTolerance(val);
-                }
-              },
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => settings.setSpeedToleranceMode(SpeedToleranceMode.fixed),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        decoration: BoxDecoration(
+                          color: settings.speedToleranceMode == SpeedToleranceMode.fixed
+                              ? const Color(0xFF2E66FF)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Statisks (+km/h)',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: settings.speedToleranceMode == SpeedToleranceMode.fixed
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => settings.setSpeedToleranceMode(SpeedToleranceMode.percentage),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        decoration: BoxDecoration(
+                          color: settings.speedToleranceMode == SpeedToleranceMode.percentage
+                              ? const Color(0xFF2E66FF)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Progresīvs (%)',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: settings.speedToleranceMode == SpeedToleranceMode.percentage
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(height: 12),
+
+            if (settings.speedToleranceMode == SpeedToleranceMode.fixed) ...[
+              const Text(
+                'Statiska tolerance virs ierobežojuma',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: settings.speedTolerance,
+                dropdownColor: const Color(0xFF1E222B),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF1E222B),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('+0 km/h (Stingrs - brīdināt tūlīt)')),
+                  DropdownMenuItem(value: 3, child: Text('+3 km/h')),
+                  DropdownMenuItem(value: 5, child: Text('+5 km/h')),
+                  DropdownMenuItem(value: 10, child: Text('+10 km/h')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    settings.setSpeedTolerance(val);
+                  }
+                },
+              ),
+            ] else ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Progresīvā tolerance:',
+                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '${settings.speedTolerancePercentage.toStringAsFixed(1)}%',
+                    style: const TextStyle(color: Color(0xFF5E9CFF), fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Slider(
+                value: settings.speedTolerancePercentage.clamp(1.0, 15.0),
+                min: 1.0,
+                max: 15.0,
+                divisions: 28,
+                label: '${settings.speedTolerancePercentage.toStringAsFixed(1)}%',
+                activeColor: const Color(0xFF2E66FF),
+                onChanged: (val) => settings.setSpeedTolerancePercentage(val),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [3.0, 5.0, 7.0, 10.0].map((preset) {
+                  final isSelected = (settings.speedTolerancePercentage - preset).abs() < 0.1;
+                  return ChoiceChip(
+                    label: Text('${preset.toInt()}%${preset == 5.0 ? ' (Ieteicams)' : ''}'),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFF2E66FF),
+                    backgroundColor: const Color(0xFF1E222B),
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                    onSelected: (_) => settings.setSpeedTolerancePercentage(preset),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E222B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2C323F)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF5E9CFF)),
+                        SizedBox(width: 6),
+                        Text(
+                          'Piemērs ar pašreizējo procentu:',
+                          style: TextStyle(color: Color(0xFF5E9CFF), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildProgressiveExampleRow(20, 'dzīvojamā zona', settings.speedTolerancePercentage),
+                    _buildProgressiveExampleRow(30, '30 km/h zona', settings.speedTolerancePercentage),
+                    _buildProgressiveExampleRow(50, 'pilsētas iela', settings.speedTolerancePercentage),
+                    _buildProgressiveExampleRow(90, 'šoseja', settings.speedTolerancePercentage),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             const Text(
               'Ceļu un pagalmu piesaistes rādiusi (metri)',
@@ -319,27 +470,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
               defaultValue: 15.0,
               onChanged: (val) => settings.setCourtyardSearchRadiusMeters(val),
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E222B),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.cyan.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.shield_outlined, color: Colors.cyanAccent, size: 20),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Krustojumu pret-spama aizsardzība: aktīva. Šķērsojamā iela netiek nosaukta uzreiz, bet prasa vismaz 2 secīgus GPS apstiprinājumus.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 24),
+            const Text(
+              'GPS stabilitātes un krustojumu filtri',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 4),
+            const Text(
+              'Pielāgojiet aiztures un histerēzes sliekšņus, lai novērstu viltus paziņojumus un spamu krustojumos vai vāja GPS signāla brīžos.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            _buildCountTile(
+              context: context,
+              title: 'Ielas maiņas apstiprinājumu skaits',
+              subtitle: 'Ieteicamais: 4 punkti (~4 sek). Novērš šķērsojamo ielu spamu krustojumos.',
+              value: settings.streetChangeConfirmations,
+              min: 1,
+              max: 10,
+              defaultValue: 4,
+              unit: 'punkti',
+              onChanged: (val) => settings.setStreetChangeConfirmations(val),
+            ),
+            const SizedBox(height: 12),
+            _buildCountTile(
+              context: context,
+              title: 'Ātruma atcelšanas apstiprinājumi',
+              subtitle: 'Ieteicamais: 4 punkti. Novērš 50 km/h mirgošanu uz vienas ielas posmiem.',
+              value: settings.speedRestorationConfirmations,
+              min: 1,
+              max: 10,
+              defaultValue: 4,
+              unit: 'punkti',
+              onChanged: (val) => settings.setSpeedRestorationConfirmations(val),
+            ),
+            const SizedBox(height: 12),
+            _buildCountTile(
+              context: context,
+              title: 'Vienvirziena ielas beigu apstiprinājumi',
+              subtitle: 'Ieteicamais: 3 punkti. Novērš kļūdainus "Vienvirziena iela ir beigusies" krustojumos.',
+              value: settings.oneWayExitConfirmations,
+              min: 1,
+              max: 10,
+              defaultValue: 3,
+              unit: 'punkti',
+              onChanged: (val) => settings.setOneWayExitConfirmations(val),
+            ),
+            const SizedBox(height: 12),
+            _buildSwitch(
+              title: 'Prioritizēt velosipēdu ceļus un ietves',
+              subtitle: 'Piemērots braukšanai ar velosipēdu vai skrejriteni, lai asistents nepiesietu auto ceļiem.',
+              value: settings.prioritizePedestrianAndCycleways,
+              onChanged: (val) => settings.setPrioritizePedestrianAndCycleways(val),
+            ),
+            _buildSwitch(
+              title: 'Filtrēt veco GPS kešu starta brīdī',
+              subtitle: 'Noraida vēsturiskos GPS datus no ierīces atmiņas, novēršot kļūdainus starta paziņojumus.',
+              value: settings.filterStaleGpsFixes,
+              onChanged: (val) => settings.setFilterStaleGpsFixes(val),
+            ),
+            if (settings.filterStaleGpsFixes) ...[
+              const SizedBox(height: 8),
+              _buildCountTile(
+                context: context,
+                title: 'Veco GPS punktu noilguma slieksnis',
+                subtitle: 'Ieteicamais: 5 sek. Punkti ar lielāku laika nobīdi no pašreizējā brīža tiek noraidīti.',
+                value: settings.staleGpsTimeoutSeconds,
+                min: 1,
+                max: 30,
+                defaultValue: 5,
+                unit: 'sek',
+                onChanged: (val) => settings.setStaleGpsTimeoutSeconds(val),
+              ),
+            ],
             const SizedBox(height: 24),
             const Text(
               'Sistēmas iestatījumi',
@@ -523,6 +726,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
               divisions: (max - min).toInt(),
               onChanged: onChanged,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountTile({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required int value,
+    required int min,
+    required int max,
+    required int defaultValue,
+    required String unit,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E222B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2C323F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              InkWell(
+                onTap: () => _showNumericInputDialog(
+                  context: context,
+                  title: title,
+                  initialValue: value,
+                  min: min,
+                  max: max,
+                  onSaved: onChanged,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$value $unit',
+                        style: const TextStyle(color: Colors.cyanAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.edit_outlined, color: Colors.cyanAccent, size: 14),
+                    ],
+                  ),
+                ),
+              ),
+              if (value != defaultValue) ...[
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Atjaunot ieteikto ($defaultValue $unit)',
+                  icon: const Icon(Icons.restart_alt_rounded, color: Colors.white54, size: 18),
+                  onPressed: () => onChanged(defaultValue),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              activeTrackColor: Colors.cyanAccent,
+              inactiveTrackColor: const Color(0xFF2C323F),
+              thumbColor: Colors.cyanAccent,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            ),
+            child: Slider(
+              value: value.toDouble().clamp(min.toDouble(), max.toDouble()),
+              min: min.toDouble(),
+              max: max.toDouble(),
+              divisions: max - min,
+              onChanged: (val) => onChanged(val.round()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressiveExampleRow(int speedLimit, String contextLabel, double percentage) {
+    final tolerance = speedLimit * (percentage / 100.0);
+    final warnSpeed = speedLimit + tolerance;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$speedLimit km/h ($contextLabel)',
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          Text(
+            'brīdina pie > ${warnSpeed.toStringAsFixed(1)} km/h (+${tolerance.toStringAsFixed(1)})',
+            style: const TextStyle(color: Color(0xFF8AB4F8), fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),

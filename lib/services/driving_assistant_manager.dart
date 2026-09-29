@@ -72,13 +72,23 @@ class DrivingAssistantManager extends ChangeNotifier {
     stateMachine.useDynamicPhrases = settingsService.useDynamicPhrases;
     _isMuted = settingsService.isMuted;
     
-    if (settingsService.keepScreenOn) {
+    realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
+    realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.filterStaleGpsFixes = settingsService.filterStaleGpsFixes;
+    realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
+    realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
+
+    _updateWakelock();
+    
+    notifyListeners();
+  }
+
+  void _updateWakelock() {
+    if (settingsService.keepScreenOn && _mode != DriveMode.idle) {
       WakelockPlus.enable();
     } else {
       WakelockPlus.disable();
     }
-    
-    notifyListeners();
   }
 
 
@@ -145,6 +155,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     stateMachine.reset();
     _alertHistory.clear();
     _mode = DriveMode.mockSimulation;
+    _updateWakelock();
     notifyListeners();
 
     _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
@@ -158,6 +169,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     stateMachine.reset();
     _alertHistory.clear();
     _mode = DriveMode.mockSimulation;
+    _updateWakelock();
     notifyListeners();
 
     final count = await mockLocationService.loadRouteFromFile(file);
@@ -190,9 +202,12 @@ class DrivingAssistantManager extends ChangeNotifier {
     _alertHistory.clear();
     _firstRealPointAnnounced = false;
 
-    // Apply latest user-configured search radii
+    // Apply latest user-configured search radii and filters
     realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
     realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.filterStaleGpsFixes = settingsService.filterStaleGpsFixes;
+    realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
+    realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
 
     final started = await realLocationService.startTracking();
     if (started) {
@@ -202,10 +217,12 @@ class DrivingAssistantManager extends ChangeNotifier {
         recordLog: settingsService.recordAlertLogs,
       );
       _locationSubscription = realLocationService.locationStream.listen(_onNewRoadPoint);
+      _updateWakelock();
       notifyListeners();
       return true;
     } else {
       _mode = DriveMode.idle;
+      _updateWakelock();
       notifyListeners();
       return false;
     }
@@ -222,6 +239,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     _currentPoint = null;
     _firstRealPointAnnounced = false;
     _mode = DriveMode.idle;
+    _updateWakelock();
     notifyListeners();
   }
 
@@ -230,6 +248,9 @@ class DrivingAssistantManager extends ChangeNotifier {
     // Keep real location service settings in sync with current street & radius preferences
     realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
     realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.filterStaleGpsFixes = settingsService.filterStaleGpsFixes;
+    realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
+    realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
     realLocationService.currentRoadName = stateMachine.currentStreetName;
 
     RoadPoint effectivePoint = point;
@@ -244,6 +265,9 @@ class DrivingAssistantManager extends ChangeNotifier {
           maxRadiusMeters: settingsService.roadSearchRadiusMeters,
           courtyardRadiusMeters: settingsService.courtyardSearchRadiusMeters,
           currentRoadName: stateMachine.currentStreetName,
+          vehicleHeading: point.heading,
+          vehicleSpeedKmh: point.vehicleSpeedKmh,
+          prioritizePedestrianAndCycleways: settingsService.prioritizePedestrianAndCycleways,
         );
         if (roadAttr != null) {
           effectivePoint = point.copyWith(
@@ -272,7 +296,12 @@ class DrivingAssistantManager extends ChangeNotifier {
     final events = stateMachine.processRoadPoint(
       effectivePoint,
       speedTolerance: settingsService.speedTolerance,
+      toleranceMode: settingsService.speedToleranceMode,
+      speedTolerancePercentage: settingsService.speedTolerancePercentage,
       speedWarningInterval: settingsService.speedWarningInterval,
+      streetChangeConfirmations: settingsService.streetChangeConfirmations,
+      speedRestorationConfirmations: settingsService.speedRestorationConfirmations,
+      oneWayExitConfirmations: settingsService.oneWayExitConfirmations,
     );
 
     // Announce initial street and limit when acquiring the first real GPS fix
@@ -306,6 +335,7 @@ class DrivingAssistantManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    settingsService.removeListener(_onSettingsChanged);
     stop();
     mockLocationService.dispose();
     realLocationService.dispose();

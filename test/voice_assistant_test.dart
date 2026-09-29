@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rva/models/road_point.dart';
 import 'package:rva/models/voice_alert_event.dart';
 import 'package:rva/services/voice_assistant_state_machine.dart';
+import 'package:rva/services/settings_service.dart';
 
 void main() {
   group('Voice Assistant Dynamic Street Naming and Living Zone (v0.2.0) Tests', () {
@@ -459,6 +460,338 @@ void main() {
       expect(dynamicStateMachine.isIn30SpeedZone, isFalse);
       expect(dynamicStateMachine.isInReducedSpeedZone, isFalse);
       expect(dynamicStateMachine.currentMaxSpeed, equals(50));
+    });
+
+    test('Progressive percentage speed tolerance warns at +1 km/h for 20 km/h, and +4.5 km/h for 90 km/h', () {
+      final tolStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 20,
+        initialIsOneWay: false,
+        initialStreetName: 'Pagalms',
+      );
+
+      // In 20 km/h living street with 5% tolerance: threshold = 20 + (20 * 0.05) = 21.0 km/h
+      // Driving 20.9 km/h -> NOT speeding
+      var events = tolStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3900,
+          longitude: 21.5600,
+          vehicleSpeedKmh: 20.9,
+          maxSpeedLimitKmh: 20,
+          isOneWay: false,
+          streetName: 'Pagalms',
+          timestamp: DateTime.now(),
+        ),
+        toleranceMode: SpeedToleranceMode.percentage,
+        speedTolerancePercentage: 5.0,
+      );
+      expect(events.where((e) => e.type == VoiceAlertType.speedingWarning), isEmpty);
+
+      // Driving 21.2 km/h (> 21.0 km/h) -> triggers speeding warning at 1st km over!
+      events = tolStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3901,
+          longitude: 21.5601,
+          vehicleSpeedKmh: 21.2,
+          maxSpeedLimitKmh: 20,
+          isOneWay: false,
+          streetName: 'Pagalms',
+          timestamp: DateTime.now(),
+        ),
+        toleranceMode: SpeedToleranceMode.percentage,
+        speedTolerancePercentage: 5.0,
+      );
+      expect(events.where((e) => e.type == VoiceAlertType.speedingWarning), isNotEmpty);
+
+      // On 90 km/h road with 5% tolerance: threshold = 90 + (90 * 0.05) = 94.5 km/h
+      final highwayStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 90,
+        initialIsOneWay: false,
+        initialStreetName: 'Ventspils šoseja',
+      );
+
+      // Driving 94.0 km/h -> NOT speeding (since 94.0 <= 94.5)
+      events = highwayStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3900,
+          longitude: 21.5600,
+          vehicleSpeedKmh: 94.0,
+          maxSpeedLimitKmh: 90,
+          isOneWay: false,
+          streetName: 'Ventspils šoseja',
+          timestamp: DateTime.now(),
+        ),
+        toleranceMode: SpeedToleranceMode.percentage,
+        speedTolerancePercentage: 5.0,
+      );
+      expect(events.where((e) => e.type == VoiceAlertType.speedingWarning), isEmpty);
+
+      // Driving 95.0 km/h (> 94.5 km/h) -> triggers speeding warning
+      events = highwayStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3901,
+          longitude: 21.5601,
+          vehicleSpeedKmh: 95.0,
+          maxSpeedLimitKmh: 90,
+          isOneWay: false,
+          streetName: 'Ventspils šoseja',
+          timestamp: DateTime.now(),
+        ),
+        toleranceMode: SpeedToleranceMode.percentage,
+        speedTolerancePercentage: 5.0,
+      );
+      expect(events.where((e) => e.type == VoiceAlertType.speedingWarning), isNotEmpty);
+    });
+
+    test('Static speed tolerance behaves according to fixed km/h offset', () {
+      final staticStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+      );
+
+      // With static tolerance = 5 km/h: threshold = 55.0 km/h
+      // Driving 54.5 km/h -> NOT speeding
+      var events = staticStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3900,
+          longitude: 21.5600,
+          vehicleSpeedKmh: 54.5,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+        toleranceMode: SpeedToleranceMode.fixed,
+        speedTolerance: 5,
+      );
+      expect(events.where((e) => e.type == VoiceAlertType.speedingWarning), isEmpty);
+
+      // Driving 56.0 km/h -> triggers speeding warning
+      events = staticStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3901,
+          longitude: 21.5601,
+          vehicleSpeedKmh: 56.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+        toleranceMode: SpeedToleranceMode.fixed,
+        speedTolerance: 5,
+      );
+      expect(events.where((e) => e.type == VoiceAlertType.speedingWarning), isNotEmpty);
+    });
+
+    test('Standstill filter at traffic lights (< 3.5 km/h) prevents street switching and false one-way alerts', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Jūras iela',
+        announceStreetChanges: true,
+      );
+
+      // Stopped at red light at Kuldīgas iela intersection (speed = 0.5 km/h)
+      // GPS drifts and reports Kuldīgas iela with isOneWay = true
+      for (var i = 0; i < 5; i++) {
+        final events = stateMachine.processRoadPoint(
+          RoadPoint(
+            latitude: 57.3945,
+            longitude: 21.5645,
+            vehicleSpeedKmh: 0.5,
+            maxSpeedLimitKmh: 50,
+            isOneWay: true,
+            streetName: 'Kuldīgas iela',
+            timestamp: DateTime.now().add(Duration(seconds: i)),
+          ),
+        );
+
+        // No street changed, no one-way entered because speed < 3.5 km/h
+        expect(events, isEmpty, reason: 'Standstill filter must freeze alerts while stopped at traffic light');
+        expect(stateMachine.currentStreetName, equals('Jūras iela'));
+        expect(stateMachine.isOneWay, isFalse);
+      }
+    });
+
+    test('Courtyard driveway downgrade is ignored when driving along an established named street', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Jūras iela',
+        announceStreetChanges: true,
+      );
+
+      // Moving along Jūras iela at 20 km/h, GPS passes adjacent courtyard driveway (Pagalma brauktuve)
+      for (var i = 0; i < 3; i++) {
+        final events = stateMachine.processRoadPoint(
+          RoadPoint(
+            latitude: 57.3948,
+            longitude: 21.5650,
+            vehicleSpeedKmh: 20.0,
+            maxSpeedLimitKmh: 50,
+            isOneWay: false,
+            streetName: 'Pagalma brauktuve',
+            timestamp: DateTime.now().add(Duration(seconds: i)),
+          ),
+        );
+
+        // Downgrade ignored: remains on Jūras iela
+        expect(events.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+        expect(stateMachine.currentStreetName, equals('Jūras iela'));
+      }
+    });
+
+    test('Custom streetChangeConfirmations (4 points) prevents intersection cross-street spam', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kārļa iela',
+        announceStreetChanges: true,
+      );
+
+      // Points 1, 2, 3 on Ganību iela (cross street touched for 3 seconds)
+      for (var i = 1; i <= 3; i++) {
+        final events = stateMachine.processRoadPoint(
+          RoadPoint(
+            latitude: 57.3940,
+            longitude: 21.5640,
+            vehicleSpeedKmh: 20.0,
+            maxSpeedLimitKmh: 50,
+            isOneWay: false,
+            streetName: 'Ganību iela',
+            timestamp: DateTime.now().add(Duration(seconds: i)),
+          ),
+          streetChangeConfirmations: 4,
+        );
+
+        expect(events.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty,
+            reason: 'Points 1..3 must NOT trigger streetChanged when threshold is 4');
+        expect(stateMachine.currentStreetName, equals('Kārļa iela'));
+      }
+
+      // Point 4: 4th consecutive point confirms turn into Ganību iela
+      final finalEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3942,
+          longitude: 21.5640,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 4)),
+        ),
+        streetChangeConfirmations: 4,
+      );
+
+      expect(finalEvents.where((e) => e.type == VoiceAlertType.streetChanged).length, equals(1));
+      expect(stateMachine.currentStreetName, equals('Ganību iela'));
+    });
+
+    test('Custom speedRestorationConfirmations (4 points) prevents 50 km/h flickering', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 30,
+        initialIsOneWay: false,
+        initialStreetName: 'Sarkanmuižas dambis',
+        useDynamicPhrases: true,
+      );
+
+      // Enter 30 zone
+      stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3920,
+          longitude: 21.5730,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Sarkanmuižas dambis',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(stateMachine.isIn30SpeedZone, isTrue);
+
+      // 3 brief GPS points reporting 50 km/h (e.g. crossing an unmapped node)
+      for (var i = 1; i <= 3; i++) {
+        final events = stateMachine.processRoadPoint(
+          RoadPoint(
+            latitude: 57.3925,
+            longitude: 21.5735,
+            vehicleSpeedKmh: 25.0,
+            maxSpeedLimitKmh: 50,
+            isOneWay: false,
+            isZone: false,
+            streetName: 'Sarkanmuižas dambis',
+            timestamp: DateTime.now().add(Duration(seconds: i)),
+          ),
+          speedRestorationConfirmations: 4,
+        );
+
+        expect(events.where((e) => e.type == VoiceAlertType.speedZoneEnded || e.type == VoiceAlertType.speedRestored), isEmpty,
+            reason: '3 points must not restore speed when threshold is 4');
+        expect(stateMachine.isIn30SpeedZone, isTrue);
+      }
+
+      // Point 4: 4th point at 50 km/h confirms exit of speed zone
+      final finalEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3930,
+          longitude: 21.5740,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Sarkanmuižas dambis',
+          timestamp: DateTime.now().add(const Duration(seconds: 4)),
+        ),
+        speedRestorationConfirmations: 4,
+      );
+
+      expect(finalEvents.where((e) => e.type == VoiceAlertType.speedZoneEnded).length, equals(1));
+      expect(stateMachine.isIn30SpeedZone, isFalse);
+    });
+
+    test('Custom oneWayExitConfirmations (3 points) debounces exit from one-way street', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: true,
+        initialStreetName: 'Kārļa iela',
+      );
+
+      // Points 1 and 2: momentary isOneWay = false at an intersection
+      for (var i = 1; i <= 2; i++) {
+        final events = stateMachine.processRoadPoint(
+          RoadPoint(
+            latitude: 57.3950,
+            longitude: 21.5640,
+            vehicleSpeedKmh: 20.0,
+            maxSpeedLimitKmh: 50,
+            isOneWay: false,
+            streetName: 'Kārļa iela',
+            timestamp: DateTime.now().add(Duration(seconds: i)),
+          ),
+          oneWayExitConfirmations: 3,
+        );
+
+        expect(events.where((e) => e.type == VoiceAlertType.oneWayExited), isEmpty);
+        expect(stateMachine.isOneWay, isTrue);
+      }
+
+      // Point 3: confirms real exit
+      final finalEvents = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3955,
+          longitude: 21.5640,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kārļa iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 3)),
+        ),
+        oneWayExitConfirmations: 3,
+      );
+
+      expect(finalEvents.where((e) => e.type == VoiceAlertType.oneWayExited).length, equals(1));
+      expect(stateMachine.isOneWay, isFalse);
     });
   });
 }

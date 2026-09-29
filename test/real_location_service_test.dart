@@ -19,6 +19,9 @@ class FakePMTilesServiceLoaded extends PMTilesService {
     double? maxRadiusMeters = 40.0,
     double? courtyardRadiusMeters = 15.0,
     String? currentRoadName,
+    double? vehicleHeading,
+    double? vehicleSpeedKmh,
+    bool prioritizePedestrianAndCycleways = false,
   }) async {
     return const RoadAttributes(
       maxspeed: 30,
