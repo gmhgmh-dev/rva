@@ -62,6 +62,9 @@ scripts/send_manual_report.py
 send_to_telegram.py
 send_uncommitted_release.py
 scripts/send_update_to_telegram.py
+scripts/check_releases.py
+scripts/inspect_release_details.py
+scripts/fix_github_releases.py
 *.apk
 received_logs/
 patch_*.py
