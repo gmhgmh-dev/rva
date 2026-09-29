@@ -330,6 +330,9 @@ class RealLocationService {
           maxRadiusMeters: roadSearchRadiusMeters,
           courtyardRadiusMeters: courtyardSearchRadiusMeters,
           currentRoadName: currentRoadName,
+          vehicleHeading: position.heading,
+          vehicleSpeedKmh: speedKmh,
+          prioritizePedestrianAndCycleways: prioritizePedestrianAndCycleways,
         );
         if (roadAttrs != null) {
           final effectiveSpeed = resolveSpeedLimit(
