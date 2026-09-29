@@ -623,16 +623,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (val) => settings.setRecordAlertLogs(val),
             ),
             const SizedBox(height: 16),
+            // Big Diagnostic Bundle Button
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0D47A1), Color(0xFF00838F)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.cyanAccent.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.send_rounded, size: 22, color: Colors.white),
+                label: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Nosūtīt pēdējo braucienu un iestatījumus analīzei',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Apvieno pēdējo GPX, brīdinājumu .log un iestatījumus .json vienā pakotnē',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                onPressed: () async {
+                  try {
+                    await widget.assistantManager.tripRecorderService.exportDiagnosticBundle(settings);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Kļūda sagatavojot pakotni: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Iestatījumu konfigurācijas pārvaldība (JSON)',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Eksportējiet savus pielāgotos iestatījumus drošībai vai importējiet gatavu konfigurāciju.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.share_rounded, size: 18),
-                    label: const Text('Eksportēt datus'),
+                    icon: const Icon(Icons.file_upload_outlined, size: 18),
+                    label: const Text('Eksportēt .json'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.cyan.withOpacity(0.2),
+                      backgroundColor: Colors.cyan.withOpacity(0.18),
                       foregroundColor: Colors.cyanAccent,
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      try {
+                        await widget.assistantManager.tripRecorderService.exportSettingsFile(settings);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Neizdevās eksportēt iestatījumus: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.file_download_outlined, size: 18),
+                    label: const Text('Importēt .json'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo.withOpacity(0.25),
+                      foregroundColor: const Color(0xFF8AB4F8),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => _showImportSettingsDialog(context, settings),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Braucienu vēstures faili',
+              style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('Visi ieraksti'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Color(0xFF2C323F)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: () {
                       widget.assistantManager.tripRecorderService.shareRecordedFiles();
@@ -641,19 +764,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: const Text('Dzēst datus'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent.withOpacity(0.1),
+                    label: const Text('Dzēst visus'),
+                    style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.redAccent,
+                      side: BorderSide(color: Colors.redAccent.withOpacity(0.4)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    onPressed: () {
-                      widget.assistantManager.tripRecorderService.deleteAllRecordedFiles();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Visi saglabātie braucienu faili ir dzēsti.')),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1E222B),
+                          title: const Text('Dzēst visus braucienu failus?', style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                            'Visi lokāli saglabātie .gpx un .log faili tiks neatgriezeniski dzēsti.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Atcelt', style: TextStyle(color: Colors.white54)),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Dzēst'),
+                            ),
+                          ],
+                        ),
                       );
+                      if (confirm == true) {
+                        await widget.assistantManager.tripRecorderService.deleteAllRecordedFiles();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Visi saglabātie braucienu faili ir dzēsti.')),
+                          );
+                        }
+                      }
                     },
                   ),
                 ),
@@ -769,6 +919,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
               divisions: (max - min).toInt(),
               onChanged: onChanged,
             ),
+          ),
+          if (value < 15.0) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 14),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Šaurs rādiuss (<15 m) var izraisīt ceļa pazaudēšanu manevrējot vai braucot ar skrejriteni.',
+                    style: TextStyle(color: Colors.amberAccent.shade100, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showImportSettingsDialog(BuildContext context, SettingsService settings) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E222B),
+        title: const Text('Importēt iestatījumus', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Ielīmējiet iestatījumu JSON tekstu zemāk:',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 8,
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+              decoration: InputDecoration(
+                hintText: '{\n  "road_search_radius_meters": 40.0,\n  ...\n}',
+                hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                filled: true,
+                fillColor: const Color(0xFF14171F),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Atcelt', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2E66FF),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              final success = await settings.importJsonString(text);
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? 'Iestatījumi veiksmīgi importēti un piemēroti!'
+                          : 'Kļūda importējot iestatījumus: nederīgs JSON formāts.',
+                    ),
+                    backgroundColor: success ? Colors.green.shade800 : Colors.redAccent,
+                  ),
+                );
+              }
+            },
+            child: const Text('Importēt un piemērot'),
           ),
         ],
       ),

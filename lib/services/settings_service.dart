@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -303,5 +304,176 @@ class SettingsService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keySpeedCameraAlerts, value);
     notifyListeners();
+  }
+
+  /// Exports all current user settings as a Map
+  Map<String, dynamic> exportSettings() {
+    return {
+      _keyUseDynamicPhrases: _useDynamicPhrases,
+      _keyAnnounceStreetChanges: _announceStreetChanges,
+      _keyIsMuted: _isMuted,
+      _keySpeedTolerance: _speedTolerance,
+      _keySpeedToleranceMode: _speedToleranceMode.name,
+      _keySpeedTolerancePercentage: _speedTolerancePercentage,
+      _keySpeedingBeepOnly: _speedingBeepOnly,
+      _keySpeedWarningInterval: _speedWarningInterval,
+      _keyAutoStartGps: _autoStartGps,
+      _keyKeepScreenOn: _keepScreenOn,
+      _keyRecordGpx: _recordGpx,
+      _keyRecordAlertLogs: _recordAlertLogs,
+      _keyRoadSearchRadiusMeters: _roadSearchRadiusMeters,
+      _keyCourtyardSearchRadiusMeters: _courtyardSearchRadiusMeters,
+      _keyStreetChangeConfirmations: _streetChangeConfirmations,
+      _keySpeedRestorationConfirmations: _speedRestorationConfirmations,
+      _keyOneWayExitConfirmations: _oneWayExitConfirmations,
+      _keyFilterStaleGpsFixes: _filterStaleGpsFixes,
+      _keyStaleGpsTimeoutSeconds: _staleGpsTimeoutSeconds,
+      _keyPrioritizePedestrianAndCycleways: _prioritizePedestrianAndCycleways,
+      _keyAudioDucking: _audioDucking,
+      _keyLookaheadAlerts: _lookaheadAlerts,
+      _keyLookaheadDistanceMeters: _lookaheadDistanceMeters,
+      _keyTrafficCalmingAlerts: _trafficCalmingAlerts,
+      _keySpeedCameraAlerts: _speedCameraAlerts,
+      'exported_at': DateTime.now().toIso8601String(),
+      'app_version': '0.2.0',
+    };
+  }
+
+  /// Exports settings as a formatted JSON string
+  String exportJsonString() {
+    return const JsonEncoder.withIndent('  ').convert(exportSettings());
+  }
+
+  /// Imports settings from a JSON map and persists them to SharedPreferences
+  Future<bool> importSettings(Map<String, dynamic> map) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      if (map.containsKey(_keyUseDynamicPhrases)) {
+        _useDynamicPhrases = map[_keyUseDynamicPhrases] == true;
+        await prefs.setBool(_keyUseDynamicPhrases, _useDynamicPhrases);
+      }
+      if (map.containsKey(_keyAnnounceStreetChanges)) {
+        _announceStreetChanges = map[_keyAnnounceStreetChanges] == true;
+        await prefs.setBool(_keyAnnounceStreetChanges, _announceStreetChanges);
+      }
+      if (map.containsKey(_keyIsMuted)) {
+        _isMuted = map[_keyIsMuted] == true;
+        await prefs.setBool(_keyIsMuted, _isMuted);
+      }
+      if (map.containsKey(_keySpeedTolerance)) {
+        _speedTolerance = (map[_keySpeedTolerance] as num).toInt();
+        await prefs.setInt(_keySpeedTolerance, _speedTolerance);
+      }
+      if (map.containsKey(_keySpeedToleranceMode)) {
+        final modeStr = map[_keySpeedToleranceMode]?.toString();
+        _speedToleranceMode = modeStr == 'percentage'
+            ? SpeedToleranceMode.percentage
+            : SpeedToleranceMode.fixed;
+        await prefs.setString(_keySpeedToleranceMode, _speedToleranceMode.name);
+      }
+      if (map.containsKey(_keySpeedTolerancePercentage)) {
+        _speedTolerancePercentage = (map[_keySpeedTolerancePercentage] as num).toDouble();
+        await prefs.setDouble(_keySpeedTolerancePercentage, _speedTolerancePercentage);
+      }
+      if (map.containsKey(_keySpeedingBeepOnly)) {
+        _speedingBeepOnly = map[_keySpeedingBeepOnly] == true;
+        await prefs.setBool(_keySpeedingBeepOnly, _speedingBeepOnly);
+      }
+      if (map.containsKey(_keySpeedWarningInterval)) {
+        _speedWarningInterval = (map[_keySpeedWarningInterval] as num).toInt();
+        await prefs.setInt(_keySpeedWarningInterval, _speedWarningInterval);
+      }
+      if (map.containsKey(_keyAutoStartGps)) {
+        _autoStartGps = map[_keyAutoStartGps] == true;
+        await prefs.setBool(_keyAutoStartGps, _autoStartGps);
+      }
+      if (map.containsKey(_keyKeepScreenOn)) {
+        _keepScreenOn = map[_keyKeepScreenOn] == true;
+        await prefs.setBool(_keyKeepScreenOn, _keepScreenOn);
+      }
+      if (map.containsKey(_keyRecordGpx)) {
+        _recordGpx = map[_keyRecordGpx] == true;
+        await prefs.setBool(_keyRecordGpx, _recordGpx);
+      }
+      if (map.containsKey(_keyRecordAlertLogs)) {
+        _recordAlertLogs = map[_keyRecordAlertLogs] == true;
+        await prefs.setBool(_keyRecordAlertLogs, _recordAlertLogs);
+      }
+      if (map.containsKey(_keyRoadSearchRadiusMeters)) {
+        _roadSearchRadiusMeters = (map[_keyRoadSearchRadiusMeters] as num).toDouble();
+        await prefs.setDouble(_keyRoadSearchRadiusMeters, _roadSearchRadiusMeters);
+      }
+      if (map.containsKey(_keyCourtyardSearchRadiusMeters)) {
+        _courtyardSearchRadiusMeters = (map[_keyCourtyardSearchRadiusMeters] as num).toDouble();
+        await prefs.setDouble(_keyCourtyardSearchRadiusMeters, _courtyardSearchRadiusMeters);
+      }
+      if (map.containsKey(_keyStreetChangeConfirmations)) {
+        _streetChangeConfirmations = (map[_keyStreetChangeConfirmations] as num).toInt();
+        await prefs.setInt(_keyStreetChangeConfirmations, _streetChangeConfirmations);
+      }
+      if (map.containsKey(_keySpeedRestorationConfirmations)) {
+        _speedRestorationConfirmations = (map[_keySpeedRestorationConfirmations] as num).toInt();
+        await prefs.setInt(_keySpeedRestorationConfirmations, _speedRestorationConfirmations);
+      }
+      if (map.containsKey(_keyOneWayExitConfirmations)) {
+        _oneWayExitConfirmations = (map[_keyOneWayExitConfirmations] as num).toInt();
+        await prefs.setInt(_keyOneWayExitConfirmations, _oneWayExitConfirmations);
+      }
+      if (map.containsKey(_keyFilterStaleGpsFixes)) {
+        _filterStaleGpsFixes = map[_keyFilterStaleGpsFixes] == true;
+        await prefs.setBool(_keyFilterStaleGpsFixes, _filterStaleGpsFixes);
+      }
+      if (map.containsKey(_keyStaleGpsTimeoutSeconds)) {
+        _staleGpsTimeoutSeconds = (map[_keyStaleGpsTimeoutSeconds] as num).toInt();
+        await prefs.setInt(_keyStaleGpsTimeoutSeconds, _staleGpsTimeoutSeconds);
+      }
+      if (map.containsKey(_keyPrioritizePedestrianAndCycleways)) {
+        _prioritizePedestrianAndCycleways = map[_keyPrioritizePedestrianAndCycleways] == true;
+        await prefs.setBool(_keyPrioritizePedestrianAndCycleways, _prioritizePedestrianAndCycleways);
+      }
+      if (map.containsKey(_keyAudioDucking)) {
+        _audioDucking = map[_keyAudioDucking] == true;
+        await prefs.setBool(_keyAudioDucking, _audioDucking);
+      }
+      if (map.containsKey(_keyLookaheadAlerts)) {
+        _lookaheadAlerts = map[_keyLookaheadAlerts] == true;
+        await prefs.setBool(_keyLookaheadAlerts, _lookaheadAlerts);
+      }
+      if (map.containsKey(_keyLookaheadDistanceMeters)) {
+        _lookaheadDistanceMeters = (map[_keyLookaheadDistanceMeters] as num).toDouble();
+        await prefs.setDouble(_keyLookaheadDistanceMeters, _lookaheadDistanceMeters);
+      }
+      if (map.containsKey(_keyTrafficCalmingAlerts)) {
+        _trafficCalmingAlerts = map[_keyTrafficCalmingAlerts] == true;
+        await prefs.setBool(_keyTrafficCalmingAlerts, _trafficCalmingAlerts);
+      }
+      if (map.containsKey(_keySpeedCameraAlerts)) {
+        _speedCameraAlerts = map[_keySpeedCameraAlerts] == true;
+        await prefs.setBool(_keySpeedCameraAlerts, _speedCameraAlerts);
+      }
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Failed to import settings: $e');
+      return false;
+    }
+  }
+
+  /// Imports settings from a JSON string
+  Future<bool> importJsonString(String jsonString) async {
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is Map<String, dynamic>) {
+        return await importSettings(decoded);
+      } else if (decoded is Map) {
+        return await importSettings(Map<String, dynamic>.from(decoded));
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Invalid JSON string for settings: $e');
+      return false;
+    }
   }
 }

@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/road_point.dart';
 import '../models/voice_alert_event.dart';
+import 'settings_service.dart';
 
 class TripRecorderService {
   File? _gpxFile;
@@ -114,6 +115,56 @@ class TripRecorderService {
     await Share.shareXFiles(xFiles, text: 'Mani braucienu dati no Roads Voice Assistant');
   }
 
+  /// Exports current settings and the latest GPX/Log trip files as a single bundle for analysis
+  Future<void> exportDiagnosticBundle(SettingsService settingsService) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+    final settingsFile = File('${dir.path}/settings_$timestamp.json');
+    await settingsFile.writeAsString(settingsService.exportJsonString());
+
+    final recorded = await getRecordedFiles();
+    // Sort descending by last modified
+    recorded.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+
+    File? latestGpx;
+    File? latestLog;
+
+    for (final f in recorded) {
+      final name = f.path.split(Platform.pathSeparator).last;
+      if (latestGpx == null && name.startsWith('trip_') && name.endsWith('.gpx')) {
+        latestGpx = f;
+      }
+      if (latestLog == null && name.startsWith('alerts_') && name.endsWith('.log')) {
+        latestLog = f;
+      }
+      if (latestGpx != null && latestLog != null) break;
+    }
+
+    final filesToShare = <XFile>[
+      XFile(settingsFile.path),
+    ];
+    if (latestGpx != null) filesToShare.add(XFile(latestGpx.path));
+    if (latestLog != null) filesToShare.add(XFile(latestLog.path));
+
+    await Share.shareXFiles(
+      filesToShare,
+      text: 'RVA Diagnostikas pakotne (GPX, Brīdinājumu žurnāls un Iestatījumi)',
+    );
+  }
+
+  /// Exports current settings JSON only and opens share sheet
+  Future<void> exportSettingsFile(SettingsService settingsService) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+    final settingsFile = File('${dir.path}/rva_settings_$timestamp.json');
+    await settingsFile.writeAsString(settingsService.exportJsonString());
+
+    await Share.shareXFiles(
+      [XFile(settingsFile.path)],
+      text: 'Roads Voice Assistant iestatījumu konfigurācija (.json)',
+    );
+  }
+
   Future<void> deleteAllRecordedFiles() async {
     final files = await getRecordedFiles();
     for (var file in files) {
@@ -127,3 +178,4 @@ class TripRecorderService {
     _logFile = null;
   }
 }
+

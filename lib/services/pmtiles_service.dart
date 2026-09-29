@@ -109,12 +109,16 @@ class PMTilesService {
       int extentNamed = 4096;
 
       double minLivingDistanceSq = double.infinity;
+      double minLivingGeoDistSq = double.infinity;
       VectorTileFeature? closestLivingFeature;
       int extentLiving = 4096;
 
       double minPedCycleDistanceSq = double.infinity;
+      double minPedCycleGeoDistSq = double.infinity;
       VectorTileFeature? closestPedCycleFeature;
       int extentPedCycle = 4096;
+
+      double minNamedGeoDistSq = double.infinity;
 
       final normalizedCurrentRoad = currentRoadName?.trim().toLowerCase();
 
@@ -185,6 +189,7 @@ class PMTilesService {
 
           if (isPedOrCycle && featureMinDistSq < minPedCycleDistanceSq) {
             minPedCycleDistanceSq = featureMinDistSq;
+            minPedCycleGeoDistSq = featureMinDistSq;
             closestPedCycleFeature = feature;
             extentPedCycle = extent;
           }
@@ -193,6 +198,7 @@ class PMTilesService {
           final isLiving = rawClass == 'living_street';
           if (isLiving && featureMinDistSq < minLivingDistanceSq) {
             minLivingDistanceSq = featureMinDistSq;
+            minLivingGeoDistSq = featureMinDistSq;
             closestLivingFeature = feature;
             extentLiving = extent;
           }
@@ -204,17 +210,19 @@ class PMTilesService {
               props.containsKey('name:en') ||
               props.containsKey('ref');
 
-          // Directional angle check: if the vehicle is actively moving (> 5 km/h),
+          // Directional angle check: if the vehicle is actively moving (> 3.5 km/h),
           // compare vehicle heading with this road segment's orientation.
           double headingPenalty = 1.0;
-          if (vehicleHeading != null && vehicleSpeedKmh != null && vehicleSpeedKmh > 5.0) {
+          if (vehicleHeading != null && vehicleSpeedKmh != null && vehicleSpeedKmh > 3.5) {
             final angleDiff = _angleDifference(vehicleHeading, bestSegmentBearing);
             if (angleDiff > 55.0) {
               // Perpendicular cross-street! Penalize heavily unless already on this street
-              headingPenalty = 8.0;
-            } else if (angleDiff < 30.0) {
+              headingPenalty = 12.0;
+            } else if (angleDiff > 35.0) {
+              headingPenalty = 2.5;
+            } else if (angleDiff < 25.0) {
               // Vehicle heading closely aligns with this road segment
-              headingPenalty = 0.6;
+              headingPenalty = 0.5;
             }
           }
 
@@ -225,13 +233,14 @@ class PMTilesService {
           // give it strong affinity advantage to avoid flickering to perpendicular cross-streets.
           double effectiveDistSq = featureMinDistSq;
           if (isCurrentRoad) {
-            effectiveDistSq = featureMinDistSq * 0.20; // Strong current road affinity
+            effectiveDistSq = featureMinDistSq * 0.15; // Strong current road affinity
           } else {
             effectiveDistSq = featureMinDistSq * headingPenalty;
           }
 
           if (hasName && effectiveDistSq < minNamedDistanceSq) {
             minNamedDistanceSq = effectiveDistSq;
+            minNamedGeoDistSq = featureMinDistSq;
             closestNamedFeature = feature;
             extentNamed = extent;
           }
@@ -246,9 +255,9 @@ class PMTilesService {
       }
 
       // 0. High Priority for Pedestrian / Cycleway when enabled (e.g. e-scooter or bicycle ride):
-      if (prioritizePedestrianAndCycleways && closestPedCycleFeature != null && minPedCycleDistanceSq != double.infinity) {
+      if (prioritizePedestrianAndCycleways && closestPedCycleFeature != null && minPedCycleGeoDistSq != double.infinity) {
         final metersPerPixelPedCycle = (cos(rad) * 40075016.686) / (n * extentPedCycle);
-        final distPedCycleMeters = sqrt(minPedCycleDistanceSq) * metersPerPixelPedCycle;
+        final distPedCycleMeters = sqrt(minPedCycleGeoDistSq) * metersPerPixelPedCycle;
 
         if (distPedCycleMeters <= effectiveCourtyardRadius || distPedCycleMeters <= 20.0) {
           final props = closestPedCycleFeature.decodeProperties();
@@ -256,11 +265,11 @@ class PMTilesService {
         }
       }
 
-      // Calculate distances for named and any features
+      // Calculate true geometric distances for named and any features
       double distNamedMeters = double.infinity;
-      if (closestNamedFeature != null && minNamedDistanceSq != double.infinity) {
+      if (closestNamedFeature != null && minNamedGeoDistSq != double.infinity) {
         final metersPerPixelNamed = (cos(rad) * 40075016.686) / (n * extentNamed);
-        distNamedMeters = sqrt(minNamedDistanceSq) * metersPerPixelNamed;
+        distNamedMeters = sqrt(minNamedGeoDistSq) * metersPerPixelNamed;
       }
 
       double distAnyMeters = double.infinity;
@@ -279,9 +288,9 @@ class PMTilesService {
 
       // 1. High Priority: If within courtyardSearchRadius of a living street (20 km/h), prioritize it!
       // But only if not already driving along an established named road within 20m.
-      if (closestLivingFeature != null && minLivingDistanceSq != double.infinity) {
+      if (closestLivingFeature != null && minLivingGeoDistSq != double.infinity) {
         final metersPerPixelLiving = (cos(rad) * 40075016.686) / (n * extentLiving);
-        final distLivingMeters = sqrt(minLivingDistanceSq) * metersPerPixelLiving;
+        final distLivingMeters = sqrt(minLivingGeoDistSq) * metersPerPixelLiving;
 
         if (distLivingMeters <= effectiveCourtyardRadius) {
           if (!onEstablishedNamedRoad || distNamedMeters > 20.0) {
@@ -310,6 +319,20 @@ class PMTilesService {
       if (distAnyMeters <= effectiveMaxRadius && closestAnyFeature != null) {
         final props = closestAnyFeature.decodeProperties();
         return _extractRoadAttributes(props, distAnyMeters);
+      }
+
+      // 5. Smart fallback: if moving at micro-mobility speed (<= 30 km/h) and a cycleway/footway is within 15m,
+      // snap to it instead of returning null (preventing total off-road drop).
+      if (closestPedCycleFeature != null &&
+          minPedCycleGeoDistSq != double.infinity &&
+          vehicleSpeedKmh != null &&
+          vehicleSpeedKmh <= 30.0) {
+        final metersPerPixelPedCycle = (cos(rad) * 40075016.686) / (n * extentPedCycle);
+        final distPedCycleMeters = sqrt(minPedCycleGeoDistSq) * metersPerPixelPedCycle;
+        if (distPedCycleMeters <= 15.0) {
+          final props = closestPedCycleFeature.decodeProperties();
+          return _extractRoadAttributes(props, distPedCycleMeters);
+        }
       }
 
       return null;
