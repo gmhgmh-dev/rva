@@ -20,7 +20,7 @@ void main() {
       expect(map['audio_ducking'], true);
       expect(map['lookahead_alerts'], true);
       expect(map['lookahead_distance_meters'], 70.0);
-      expect(map['app_version'], '0.2.0');
+      expect(map['app_version'], SettingsService.appVersion);
 
       final jsonStr = settings.exportJsonString();
       expect(jsonStr.contains('"road_search_radius_meters": 40.0'), true);

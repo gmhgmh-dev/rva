@@ -8,6 +8,8 @@ enum SpeedToleranceMode {
 }
 
 class SettingsService extends ChangeNotifier {
+  static const String appVersion = '0.2.1';
+
   static const _keyUseDynamicPhrases = 'use_dynamic_phrases';
   static const _keyAnnounceStreetChanges = 'announce_street_changes';
   static const _keyIsMuted = 'is_muted';
@@ -335,7 +337,7 @@ class SettingsService extends ChangeNotifier {
       _keyTrafficCalmingAlerts: _trafficCalmingAlerts,
       _keySpeedCameraAlerts: _speedCameraAlerts,
       'exported_at': DateTime.now().toIso8601String(),
-      'app_version': '0.2.0',
+      'app_version': appVersion,
     };
   }
 
