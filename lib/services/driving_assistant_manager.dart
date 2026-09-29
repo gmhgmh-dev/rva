@@ -80,6 +80,15 @@ class DrivingAssistantManager extends ChangeNotifier {
     realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
     realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
 
+    ttsService.applySettings(
+      engine: settingsService.ttsEngine,
+      voiceName: settingsService.ttsVoiceName,
+      voiceLocale: settingsService.ttsVoiceLocale,
+      speechRate: settingsService.ttsSpeechRate,
+      pitch: settingsService.ttsPitch,
+      audioDucking: settingsService.audioDucking,
+    );
+
     _updateWakelock();
     
     notifyListeners();

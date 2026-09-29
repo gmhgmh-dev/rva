@@ -17,6 +17,21 @@ class TestTtsService extends TtsService {
   Future<void> speak(String text) async {}
   @override
   Future<void> stop() async {}
+  @override
+  Future<List<String>> getAvailableEngines() async => ['com.google.android.tts', 'lv.tilde.balss'];
+  @override
+  Future<List<Map<String, String>>> getLatvianVoices() async => [
+    {'name': 'lv-lv-x-jva-local', 'locale': 'lv-LV'},
+  ];
+  @override
+  Future<void> applySettings({
+    String? engine,
+    String? voiceName,
+    String? voiceLocale,
+    double? speechRate,
+    double? pitch,
+    bool? audioDucking,
+  }) async {}
 }
 
 class FakePMTilesService extends PMTilesService {

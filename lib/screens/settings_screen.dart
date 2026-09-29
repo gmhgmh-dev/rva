@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/driving_assistant_manager.dart';
 import '../services/map_downloader_service.dart';
 import '../services/settings_service.dart';
+import '../services/tts_service.dart';
 import 'about_screen.dart';
 
 /// Settings screen managing the offline Latvia PMTiles vector map.
@@ -21,6 +22,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _urlController;
   MapFileInfo? _fileInfo;
   bool _showAdvancedUrl = false;
+  List<String> _availableEngines = [];
+  List<Map<String, String>> _availableVoices = [];
+  bool _isLoadingTtsEngines = false;
+  bool _isTestingVoice = false;
 
   MapDownloaderService get _downloader => widget.assistantManager.mapDownloaderService;
 
@@ -30,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlController = TextEditingController(text: MapDownloaderService.defaultUrl);
     _downloader.addListener(_onDownloaderChanged);
     _loadFileMetadata();
+    _loadTtsEnginesAndVoices();
   }
 
   @override
@@ -54,6 +60,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _fileInfo = info;
       });
+    }
+  }
+
+  Future<void> _loadTtsEnginesAndVoices() async {
+    setState(() => _isLoadingTtsEngines = true);
+    try {
+      final tts = widget.assistantManager.ttsService;
+      final engines = await tts.getAvailableEngines();
+      final voices = await tts.getLatvianVoices();
+      if (mounted) {
+        setState(() {
+          _availableEngines = engines;
+          _availableVoices = voices;
+          _isLoadingTtsEngines = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading TTS engines/voices in UI: $e');
+      if (mounted) {
+        setState(() => _isLoadingTtsEngines = false);
+      }
+    }
+  }
+
+  Future<void> _onEngineChanged(String? newEngine, SettingsService settings) async {
+    await settings.setTtsEngine(newEngine);
+    await settings.setTtsVoice(name: null, locale: null);
+    await widget.assistantManager.ttsService.applySettings(
+      engine: newEngine,
+      voiceName: null,
+      voiceLocale: null,
+    );
+    final voices = await widget.assistantManager.ttsService.getLatvianVoices();
+    if (mounted) {
+      setState(() {
+        _availableVoices = voices;
+      });
+    }
+  }
+
+  Future<void> _testVoice() async {
+    setState(() => _isTestingVoice = true);
+    try {
+      await widget.assistantManager.ttsService.testVoice();
+    } finally {
+      if (mounted) {
+        setState(() => _isTestingVoice = false);
+      }
     }
   }
 
@@ -268,6 +322,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: settings.announceStreetChanges,
               onChanged: (val) => settings.setAnnounceStreetChanges(val),
             ),
+            const SizedBox(height: 12),
+            _buildTtsSettingsCard(settings),
+            const SizedBox(height: 12),
             _buildSwitch(
               title: 'Īss pīkstiens balss vietā',
               subtitle: 'Ātruma pārsniegšanas gadījumā atskaņos tikai īsu brīdinājuma signālu.',
@@ -1510,6 +1567,291 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildTtsSettingsCard(SettingsService settings) {
+    final engineItems = <String?>[null];
+    for (final e in _availableEngines) {
+      if (!engineItems.contains(e)) engineItems.add(e);
+    }
+    if (settings.ttsEngine != null && !engineItems.contains(settings.ttsEngine)) {
+      engineItems.add(settings.ttsEngine);
+    }
+
+    final voiceItems = <String?>[null];
+    for (final v in _availableVoices) {
+      final name = v['name'];
+      if (name != null && name.isNotEmpty && !voiceItems.contains(name)) {
+        voiceItems.add(name);
+      }
+    }
+    if (settings.ttsVoiceName != null && !voiceItems.contains(settings.ttsVoiceName)) {
+      voiceItems.add(settings.ttsVoiceName);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E222B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2C323F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E66FF).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.record_voice_over_rounded, color: Color(0xFF5B8DEF), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Runas sintēze un balss (TTS)',
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Dzinējs, balss, ātrums un tonis',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: _isLoadingTtsEngines
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF5B8DEF)),
+                      )
+                    : const Icon(Icons.refresh_rounded, color: Colors.white70, size: 20),
+                tooltip: 'Pārlādēt dzinējus un balsis',
+                onPressed: _isLoadingTtsEngines ? null : _loadTtsEnginesAndVoices,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'TTS Runas dzinējs',
+            style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String?>(
+            key: ValueKey('engine_${settings.ttsEngine}'),
+            initialValue: settings.ttsEngine,
+            dropdownColor: const Color(0xFF1B1E24),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            isExpanded: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF14171C),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            items: engineItems.map((engine) {
+              return DropdownMenuItem<String?>(
+                value: engine,
+                child: Text(
+                  engine == null ? 'Sistēmas noklusētais dzinējs' : TtsService.formatEngineName(engine),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+            onChanged: (newEngine) => _onEngineChanged(newEngine, settings),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Latviešu valodas balss',
+            style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          if (_availableVoices.isNotEmpty) ...[
+            DropdownButtonFormField<String?>(
+              key: ValueKey('voice_${settings.ttsVoiceName}'),
+              initialValue: settings.ttsVoiceName,
+              dropdownColor: const Color(0xFF1B1E24),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              isExpanded: true,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF14171C),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              items: voiceItems.map((voiceName) {
+                if (voiceName == null) {
+                  return const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Dzinēja noklusētā balss', overflow: TextOverflow.ellipsis),
+                  );
+                }
+                final matched = _availableVoices.firstWhere(
+                  (v) => v['name'] == voiceName,
+                  orElse: () => {'name': voiceName, 'locale': 'lv-LV'},
+                );
+                final locale = matched['locale'] ?? '';
+                return DropdownMenuItem<String?>(
+                  value: voiceName,
+                  child: Text(
+                    locale.isNotEmpty ? '$voiceName ($locale)' : voiceName,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (voiceName) {
+                final matched = _availableVoices.firstWhere(
+                  (v) => v['name'] == voiceName,
+                  orElse: () => {},
+                );
+                settings.setTtsVoice(
+                  name: voiceName,
+                  locale: matched['locale'] ?? 'lv-LV',
+                );
+                widget.assistantManager.ttsService.applySettings(
+                  voiceName: voiceName,
+                  voiceLocale: matched['locale'] ?? 'lv-LV',
+                );
+              },
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF14171C),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF2C323F)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, color: Colors.amber, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Šim dzinējam nav atsevišķu LV balsu saraksta. Tiks izmantota sistēmas noklusētā latviešu runa.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Runas ātrums',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '${settings.ttsSpeechRate.toStringAsFixed(2)}x',
+                style: const TextStyle(color: Color(0xFF5B8DEF), fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF2E66FF),
+              inactiveTrackColor: const Color(0xFF2C323F),
+              thumbColor: const Color(0xFF5B8DEF),
+              overlayColor: const Color(0xFF2E66FF).withValues(alpha: 0.2),
+            ),
+            child: Slider(
+              value: settings.ttsSpeechRate.clamp(0.2, 1.2),
+              min: 0.2,
+              max: 1.2,
+              divisions: 20,
+              onChanged: (val) {
+                settings.setTtsSpeechRate(val);
+                widget.assistantManager.ttsService.applySettings(speechRate: val);
+              },
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Balss tonis (Pitch)',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '${settings.ttsPitch.toStringAsFixed(2)}x',
+                style: const TextStyle(color: Color(0xFF5B8DEF), fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF2E66FF),
+              inactiveTrackColor: const Color(0xFF2C323F),
+              thumbColor: const Color(0xFF5B8DEF),
+              overlayColor: const Color(0xFF2E66FF).withValues(alpha: 0.2),
+            ),
+            child: Slider(
+              value: settings.ttsPitch.clamp(0.5, 1.5),
+              min: 0.5,
+              max: 1.5,
+              divisions: 20,
+              onChanged: (val) {
+                settings.setTtsPitch(val);
+                widget.assistantManager.ttsService.applySettings(pitch: val);
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E66FF),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: _isTestingVoice
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.volume_up_rounded, size: 20),
+              label: Text(_isTestingVoice ? 'Atskaņo...' : 'Pārbaudīt balsi'),
+              onPressed: _isTestingVoice ? null : _testVoice,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF131720),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF283449)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.lightbulb_outline_rounded, color: Color(0xFF64B5F6), size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Padoms: Visdabiskākajai latviešu valodas izrunai ieteicams Google Play instalēt lietotni "Tildes Balss". Pēc instalēšanas nospiediet pārlādēšanas ikonu un atlasiet Tildi.',
+                    style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

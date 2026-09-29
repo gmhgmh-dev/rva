@@ -167,10 +167,10 @@ class PMTilesService {
 
           // Check if this feature is a pedestrian path or cycleway
           final rawClass = (props['class']?.value ?? props['highway']?.value)?.toString().toLowerCase() ?? '';
-          final rawSubclass = props['subclass']?.value?.toString().toLowerCase() ?? '';
-          final rawHighway = props['highway']?.value?.toString().toLowerCase() ?? '';
-          final bicycleTag = props['bicycle']?.value?.toString().toLowerCase() ?? '';
-          final footTag = props['foot']?.value?.toString().toLowerCase() ?? '';
+          final rawSubclass = props['subclass']?.value.toString().toLowerCase() ?? '';
+          final rawHighway = props['highway']?.value.toString().toLowerCase() ?? '';
+          final bicycleTag = props['bicycle']?.value.toString().toLowerCase() ?? '';
+          final footTag = props['foot']?.value.toString().toLowerCase() ?? '';
 
           final bool isPedOrCycle = rawClass == 'cycleway' ||
               rawSubclass == 'cycleway' ||
@@ -480,7 +480,7 @@ class PMTilesService {
         trafficCalmingVal.value.toString().isNotEmpty &&
         trafficCalmingVal.value.toString().toLowerCase() != 'no' &&
         trafficCalmingVal.value.toString().toLowerCase() != 'null';
-    final String? trafficCalmingType = hasTrafficCalming ? trafficCalmingVal!.value.toString() : null;
+    final String? trafficCalmingType = hasTrafficCalming ? trafficCalmingVal.value.toString() : null;
 
     // Detect stationary speed enforcement camera
     final bool hasSpeedCamera = rawHighway == 'speed_camera' ||

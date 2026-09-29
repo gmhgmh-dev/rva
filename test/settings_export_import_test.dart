@@ -21,12 +21,15 @@ void main() {
       expect(map['lookahead_alerts'], true);
       expect(map['lookahead_distance_meters'], 70.0);
       expect(map['voice_alert_style'], 'concise');
+      expect(map['tts_speech_rate'], 0.5);
+      expect(map['tts_pitch'], 1.0);
       expect(map['app_version'], SettingsService.appVersion);
 
       final jsonStr = settings.exportJsonString();
       expect(jsonStr.contains('"road_search_radius_meters": 40.0'), true);
       expect(jsonStr.contains('"audio_ducking": true'), true);
       expect(jsonStr.contains('"voice_alert_style": "concise"'), true);
+      expect(jsonStr.contains('"tts_speech_rate": 0.5'), true);
     });
 
     test('imports modified settings and persists them', () async {
@@ -41,7 +44,12 @@ void main() {
         "prioritize_pedestrian_cycleways": true,
         "audio_ducking": false,
         "lookahead_distance_meters": 85.0,
-        "voice_alert_style": "detailed"
+        "voice_alert_style": "detailed",
+        "tts_engine": "lv.tilde.balss",
+        "tts_voice_name": "lv-lv-x-jva-local",
+        "tts_voice_locale": "lv-LV",
+        "tts_speech_rate": 0.65,
+        "tts_pitch": 1.1
       }
       ''';
 
@@ -54,6 +62,11 @@ void main() {
       expect(settings.audioDucking, false);
       expect(settings.lookaheadDistanceMeters, 85.0);
       expect(settings.voiceAlertStyle, VoiceAlertStyle.detailed);
+      expect(settings.ttsEngine, "lv.tilde.balss");
+      expect(settings.ttsVoiceName, "lv-lv-x-jva-local");
+      expect(settings.ttsVoiceLocale, "lv-LV");
+      expect(settings.ttsSpeechRate, 0.65);
+      expect(settings.ttsPitch, 1.1);
 
       // Verify that reloading from SharedPreferences retains imported values
       final freshSettings = SettingsService();
@@ -65,6 +78,10 @@ void main() {
       expect(freshSettings.audioDucking, false);
       expect(freshSettings.lookaheadDistanceMeters, 85.0);
       expect(freshSettings.voiceAlertStyle, VoiceAlertStyle.detailed);
+      expect(freshSettings.ttsEngine, "lv.tilde.balss");
+      expect(freshSettings.ttsVoiceName, "lv-lv-x-jva-local");
+      expect(freshSettings.ttsSpeechRate, 0.65);
+      expect(freshSettings.ttsPitch, 1.1);
     });
 
     test('handles invalid JSON gracefully', () async {

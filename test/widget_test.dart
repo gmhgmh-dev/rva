@@ -26,6 +26,16 @@ class FakeTtsService extends TtsService {
   }
 
   @override
+  Future<void> applySettings({
+    String? engine,
+    String? voiceName,
+    String? voiceLocale,
+    double? speechRate,
+    double? pitch,
+    bool? audioDucking,
+  }) async {}
+
+  @override
   void dispose() {
     _fakeStream.close();
   }

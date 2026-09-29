@@ -42,11 +42,21 @@ class SettingsService extends ChangeNotifier {
   static const _keyLookaheadDistanceMeters = 'lookahead_distance_meters';
   static const _keyTrafficCalmingAlerts = 'traffic_calming_alerts';
   static const _keySpeedCameraAlerts = 'speed_camera_alerts';
+  static const _keyTtsEngine = 'tts_engine';
+  static const _keyTtsVoiceName = 'tts_voice_name';
+  static const _keyTtsVoiceLocale = 'tts_voice_locale';
+  static const _keyTtsSpeechRate = 'tts_speech_rate';
+  static const _keyTtsPitch = 'tts_pitch';
 
   bool _useDynamicPhrases = true;
   VoiceAlertStyle _voiceAlertStyle = VoiceAlertStyle.concise;
   bool _announceStreetChanges = true;
   bool _isMuted = false;
+  String? _ttsEngine;
+  String? _ttsVoiceName;
+  String? _ttsVoiceLocale;
+  double _ttsSpeechRate = 0.5;
+  double _ttsPitch = 1.0;
   int _speedTolerance = 0; // +0 km/h default
   SpeedToleranceMode _speedToleranceMode = SpeedToleranceMode.fixed;
   double _speedTolerancePercentage = 5.0; // 5.0% default
@@ -98,6 +108,11 @@ class SettingsService extends ChangeNotifier {
   double get lookaheadDistanceMeters => _lookaheadDistanceMeters;
   bool get trafficCalmingAlerts => _trafficCalmingAlerts;
   bool get speedCameraAlerts => _speedCameraAlerts;
+  String? get ttsEngine => _ttsEngine;
+  String? get ttsVoiceName => _ttsVoiceName;
+  String? get ttsVoiceLocale => _ttsVoiceLocale;
+  double get ttsSpeechRate => _ttsSpeechRate;
+  double get ttsPitch => _ttsPitch;
 
   /// Returns the effective speed tolerance in km/h for a given road speed limit.
   double calculateEffectiveTolerance(int speedLimitKmh) {
@@ -148,6 +163,53 @@ class SettingsService extends ChangeNotifier {
     _lookaheadDistanceMeters = (prefs.getDouble(_keyLookaheadDistanceMeters) ?? 70.0).clamp(30.0, 150.0);
     _trafficCalmingAlerts = prefs.getBool(_keyTrafficCalmingAlerts) ?? true;
     _speedCameraAlerts = prefs.getBool(_keySpeedCameraAlerts) ?? true;
+    _ttsEngine = prefs.getString(_keyTtsEngine);
+    _ttsVoiceName = prefs.getString(_keyTtsVoiceName);
+    _ttsVoiceLocale = prefs.getString(_keyTtsVoiceLocale);
+    _ttsSpeechRate = (prefs.getDouble(_keyTtsSpeechRate) ?? 0.5).clamp(0.2, 1.5);
+    _ttsPitch = (prefs.getDouble(_keyTtsPitch) ?? 1.0).clamp(0.5, 2.0);
+    notifyListeners();
+  }
+
+  Future<void> setTtsEngine(String? engine) async {
+    _ttsEngine = (engine == null || engine.trim().isEmpty) ? null : engine.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (_ttsEngine == null) {
+      await prefs.remove(_keyTtsEngine);
+    } else {
+      await prefs.setString(_keyTtsEngine, _ttsEngine!);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setTtsVoice({String? name, String? locale}) async {
+    _ttsVoiceName = (name == null || name.trim().isEmpty) ? null : name.trim();
+    _ttsVoiceLocale = (locale == null || locale.trim().isEmpty) ? null : locale.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (_ttsVoiceName == null) {
+      await prefs.remove(_keyTtsVoiceName);
+    } else {
+      await prefs.setString(_keyTtsVoiceName, _ttsVoiceName!);
+    }
+    if (_ttsVoiceLocale == null) {
+      await prefs.remove(_keyTtsVoiceLocale);
+    } else {
+      await prefs.setString(_keyTtsVoiceLocale, _ttsVoiceLocale!);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setTtsSpeechRate(double rate) async {
+    _ttsSpeechRate = rate.clamp(0.2, 1.5);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyTtsSpeechRate, _ttsSpeechRate);
+    notifyListeners();
+  }
+
+  Future<void> setTtsPitch(double pitch) async {
+    _ttsPitch = pitch.clamp(0.5, 2.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyTtsPitch, _ttsPitch);
     notifyListeners();
   }
 
@@ -370,6 +432,11 @@ class SettingsService extends ChangeNotifier {
       _keyLookaheadDistanceMeters: _lookaheadDistanceMeters,
       _keyTrafficCalmingAlerts: _trafficCalmingAlerts,
       _keySpeedCameraAlerts: _speedCameraAlerts,
+      _keyTtsEngine: _ttsEngine,
+      _keyTtsVoiceName: _ttsVoiceName,
+      _keyTtsVoiceLocale: _ttsVoiceLocale,
+      _keyTtsSpeechRate: _ttsSpeechRate,
+      _keyTtsPitch: _ttsPitch,
       'exported_at': DateTime.now().toIso8601String(),
       'app_version': appVersion,
     };
@@ -500,6 +567,41 @@ class SettingsService extends ChangeNotifier {
       if (map.containsKey(_keySpeedCameraAlerts)) {
         _speedCameraAlerts = map[_keySpeedCameraAlerts] == true;
         await prefs.setBool(_keySpeedCameraAlerts, _speedCameraAlerts);
+      }
+      if (map.containsKey(_keyTtsEngine)) {
+        _ttsEngine = map[_keyTtsEngine] as String?;
+        if (_ttsEngine != null && _ttsEngine!.isNotEmpty) {
+          await prefs.setString(_keyTtsEngine, _ttsEngine!);
+        } else {
+          _ttsEngine = null;
+          await prefs.remove(_keyTtsEngine);
+        }
+      }
+      if (map.containsKey(_keyTtsVoiceName)) {
+        _ttsVoiceName = map[_keyTtsVoiceName] as String?;
+        if (_ttsVoiceName != null && _ttsVoiceName!.isNotEmpty) {
+          await prefs.setString(_keyTtsVoiceName, _ttsVoiceName!);
+        } else {
+          _ttsVoiceName = null;
+          await prefs.remove(_keyTtsVoiceName);
+        }
+      }
+      if (map.containsKey(_keyTtsVoiceLocale)) {
+        _ttsVoiceLocale = map[_keyTtsVoiceLocale] as String?;
+        if (_ttsVoiceLocale != null && _ttsVoiceLocale!.isNotEmpty) {
+          await prefs.setString(_keyTtsVoiceLocale, _ttsVoiceLocale!);
+        } else {
+          _ttsVoiceLocale = null;
+          await prefs.remove(_keyTtsVoiceLocale);
+        }
+      }
+      if (map.containsKey(_keyTtsSpeechRate) && map[_keyTtsSpeechRate] is num) {
+        _ttsSpeechRate = (map[_keyTtsSpeechRate] as num).toDouble().clamp(0.2, 1.5);
+        await prefs.setDouble(_keyTtsSpeechRate, _ttsSpeechRate);
+      }
+      if (map.containsKey(_keyTtsPitch) && map[_keyTtsPitch] is num) {
+        _ttsPitch = (map[_keyTtsPitch] as num).toDouble().clamp(0.5, 2.0);
+        await prefs.setDouble(_keyTtsPitch, _ttsPitch);
       }
 
       notifyListeners();
