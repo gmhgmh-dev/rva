@@ -24,6 +24,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyRecordAlertLogs = 'record_alert_logs';
   static const _keyRoadSearchRadiusMeters = 'road_search_radius_meters';
   static const _keyCourtyardSearchRadiusMeters = 'courtyard_search_radius_meters';
+  static const _keyStreetChangeDistanceMeters = 'street_change_distance_meters';
   static const _keyStreetChangeConfirmations = 'street_change_confirmations';
   static const _keySpeedRestorationConfirmations = 'speed_restoration_confirmations';
   static const _keyOneWayExitConfirmations = 'one_way_exit_confirmations';
@@ -50,6 +51,7 @@ class SettingsService extends ChangeNotifier {
   bool _recordAlertLogs = false;
   double _roadSearchRadiusMeters = 40.0; // Recommended default 40m
   double _courtyardSearchRadiusMeters = 15.0; // Recommended default 15m
+  double _streetChangeDistanceMeters = 35.0; // Recommended default 35m for scooter & car
   int _streetChangeConfirmations = 4; // Recommended default: 4 points (~4s)
   int _speedRestorationConfirmations = 4; // Recommended default: 4 points (~4s)
   int _oneWayExitConfirmations = 3; // Recommended default: 3 points (~3s)
@@ -76,6 +78,7 @@ class SettingsService extends ChangeNotifier {
   bool get recordAlertLogs => _recordAlertLogs;
   double get roadSearchRadiusMeters => _roadSearchRadiusMeters;
   double get courtyardSearchRadiusMeters => _courtyardSearchRadiusMeters;
+  double get streetChangeDistanceMeters => _streetChangeDistanceMeters;
   int get streetChangeConfirmations => _streetChangeConfirmations;
   int get speedRestorationConfirmations => _speedRestorationConfirmations;
   int get oneWayExitConfirmations => _oneWayExitConfirmations;
@@ -119,6 +122,7 @@ class SettingsService extends ChangeNotifier {
     _recordAlertLogs = prefs.getBool(_keyRecordAlertLogs) ?? false;
     _roadSearchRadiusMeters = (prefs.getDouble(_keyRoadSearchRadiusMeters) ?? 40.0).clamp(10.0, 150.0);
     _courtyardSearchRadiusMeters = (prefs.getDouble(_keyCourtyardSearchRadiusMeters) ?? 15.0).clamp(5.0, 40.0);
+    _streetChangeDistanceMeters = (prefs.getDouble(_keyStreetChangeDistanceMeters) ?? 35.0).clamp(15.0, 100.0);
     _streetChangeConfirmations = (prefs.getInt(_keyStreetChangeConfirmations) ?? 4).clamp(1, 10);
     _speedRestorationConfirmations = (prefs.getInt(_keySpeedRestorationConfirmations) ?? 4).clamp(1, 10);
     _oneWayExitConfirmations = (prefs.getInt(_keyOneWayExitConfirmations) ?? 3).clamp(1, 10);
@@ -231,6 +235,13 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setStreetChangeDistanceMeters(double value) async {
+    _streetChangeDistanceMeters = value.clamp(15.0, 100.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyStreetChangeDistanceMeters, _streetChangeDistanceMeters);
+    notifyListeners();
+  }
+
   Future<void> setStreetChangeConfirmations(int value) async {
     _streetChangeConfirmations = value;
     final prefs = await SharedPreferences.getInstance();
@@ -325,6 +336,7 @@ class SettingsService extends ChangeNotifier {
       _keyRecordAlertLogs: _recordAlertLogs,
       _keyRoadSearchRadiusMeters: _roadSearchRadiusMeters,
       _keyCourtyardSearchRadiusMeters: _courtyardSearchRadiusMeters,
+      _keyStreetChangeDistanceMeters: _streetChangeDistanceMeters,
       _keyStreetChangeConfirmations: _streetChangeConfirmations,
       _keySpeedRestorationConfirmations: _speedRestorationConfirmations,
       _keyOneWayExitConfirmations: _oneWayExitConfirmations,
@@ -409,6 +421,10 @@ class SettingsService extends ChangeNotifier {
       if (map.containsKey(_keyCourtyardSearchRadiusMeters)) {
         _courtyardSearchRadiusMeters = (map[_keyCourtyardSearchRadiusMeters] as num).toDouble();
         await prefs.setDouble(_keyCourtyardSearchRadiusMeters, _courtyardSearchRadiusMeters);
+      }
+      if (map.containsKey(_keyStreetChangeDistanceMeters)) {
+        _streetChangeDistanceMeters = (map[_keyStreetChangeDistanceMeters] as num).toDouble();
+        await prefs.setDouble(_keyStreetChangeDistanceMeters, _streetChangeDistanceMeters);
       }
       if (map.containsKey(_keyStreetChangeConfirmations)) {
         _streetChangeConfirmations = (map[_keyStreetChangeConfirmations] as num).toInt();

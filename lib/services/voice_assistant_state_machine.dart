@@ -1,3 +1,4 @@
+import 'dart:math';
 import '../models/road_point.dart';
 import '../models/voice_alert_event.dart';
 import 'settings_service.dart';
@@ -29,6 +30,9 @@ class VoiceAssistantStateMachine {
   String? _currentStreetName;
   String? _pendingStreetCandidate;
   int _pendingStreetConfirmations = 0;
+  double _pendingStreetDistanceMeters = 0.0;
+  double? _lastCandidateLat;
+  double? _lastCandidateLon;
   int _pendingSpeedRestorationConfirmations = 0;
   int _pendingOneWayExitConfirmations = 0;
   int? _lastLookaheadAlertedLimit;
@@ -58,6 +62,21 @@ class VoiceAssistantStateMachine {
   bool get isIn30SpeedZone => _isIn30SpeedZone;
   bool get isInPedestrianOrBicycleWay => _isInPedestrianOrBicycleWay;
   String? get currentStreetName => _currentStreetName;
+  double get pendingStreetDistanceMeters => _pendingStreetDistanceMeters;
+
+  /// Calculates distance in meters between two GPS coordinates using Haversine formula.
+  static double calculateDistanceMeters(double lat1, double lon1, double lat2, double lon2) {
+    const earthRadius = 6371000.0;
+    final dLat = (lat2 - lat1) * (pi / 180.0);
+    final dLon = (lon2 - lon1) * (pi / 180.0);
+    final lat1Rad = lat1 * (pi / 180.0);
+    final lat2Rad = lat2 * (pi / 180.0);
+
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1Rad) * cos(lat2Rad) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
+  }
 
   /// Resets state machine to initial values (e.g. at the start of a route)
   void reset({
@@ -74,6 +93,9 @@ class VoiceAssistantStateMachine {
     _isInPedestrianOrBicycleWay = false;
     _pendingStreetCandidate = null;
     _pendingStreetConfirmations = 0;
+    _pendingStreetDistanceMeters = 0.0;
+    _lastCandidateLat = null;
+    _lastCandidateLon = null;
     _pendingSpeedRestorationConfirmations = 0;
     _pendingOneWayExitConfirmations = 0;
     _lastLookaheadAlertedLimit = null;
@@ -148,6 +170,7 @@ class VoiceAssistantStateMachine {
     SpeedToleranceMode toleranceMode = SpeedToleranceMode.fixed,
     double speedTolerancePercentage = 5.0,
     int speedWarningInterval = 10,
+    double streetChangeDistanceMeters = 35.0,
     int streetChangeConfirmations = 2,
     int speedRestorationConfirmations = 1,
     int oneWayExitConfirmations = 1,
@@ -166,10 +189,13 @@ class VoiceAssistantStateMachine {
       isPath: point.isPath,
       timestamp: point.timestamp,
       vehicleSpeedKmh: point.vehicleSpeedKmh,
+      latitude: point.latitude,
+      longitude: point.longitude,
       speedTolerance: speedTolerance,
       toleranceMode: toleranceMode,
       speedTolerancePercentage: speedTolerancePercentage,
       speedWarningInterval: speedWarningInterval,
+      streetChangeDistanceMeters: streetChangeDistanceMeters,
       streetChangeConfirmations: streetChangeConfirmations,
       speedRestorationConfirmations: speedRestorationConfirmations,
       oneWayExitConfirmations: oneWayExitConfirmations,
@@ -197,10 +223,13 @@ class VoiceAssistantStateMachine {
     bool isPath = false,
     DateTime? timestamp,
     double? vehicleSpeedKmh,
+    double? latitude,
+    double? longitude,
     int speedTolerance = 0,
     SpeedToleranceMode toleranceMode = SpeedToleranceMode.fixed,
     double speedTolerancePercentage = 5.0,
     int speedWarningInterval = 10,
+    double streetChangeDistanceMeters = 35.0,
     int streetChangeConfirmations = 2,
     int speedRestorationConfirmations = 1,
     int oneWayExitConfirmations = 1,
@@ -439,18 +468,24 @@ class VoiceAssistantStateMachine {
       }
     }
 
-    // 4. IELAS MAIŅAS STĀVOKLIS (ar krustojumu pret-spama un stāvēšanas filtru)
+    // 4. IELAS MAIŅAS STĀVOKLIS (Distance-based metros ar krustojumu pret-spama un stāvēšanas filtru)
     if (normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
       if (_currentStreetName == null) {
         // Sākotnējais ielas stāvoklis (bez maiņas paziņojuma)
         _currentStreetName = normalizedNewStreet;
         _pendingStreetCandidate = null;
         _pendingStreetConfirmations = 0;
+        _pendingStreetDistanceMeters = 0.0;
+        _lastCandidateLat = null;
+        _lastCandidateLon = null;
       } else if (!isMoving) {
-        // Stāvēšanas filtrs: automašīna stāv pie luksofora vai krustojumā (< 3.5 km/h).
-        // Neļaujam GPS svārstībām nomainīt ielu vai uzkrāt kandidātu apstiprinājumus.
+        // Stāvēšanas filtrs: automašīna/skrejritenis stāv pie luksofora vai krustojumā (< 3.5 km/h).
+        // Neļaujam GPS svārstībām nomainīt ielu vai uzkrāt distanci metros.
         _pendingStreetCandidate = null;
         _pendingStreetConfirmations = 0;
+        _pendingStreetDistanceMeters = 0.0;
+        _lastCandidateLat = null;
+        _lastCandidateLon = null;
       } else if (_currentStreetName != normalizedNewStreet) {
         // Pārbaudām, vai nav īslaicīgs kritums uz pagalma brauktuvi, kamēr auto brauc pa galveno ielu
         final bool isDowngradeToDriveway = (normalizedNewStreet == 'Pagalma brauktuve' ||
@@ -463,22 +498,47 @@ class VoiceAssistantStateMachine {
           // Ignorējam nejaušu pagalma pievilkšanos, braucot pa reālu ielu
           _pendingStreetCandidate = null;
           _pendingStreetConfirmations = 0;
+          _pendingStreetDistanceMeters = 0.0;
+          _lastCandidateLat = null;
+          _lastCandidateLon = null;
         } else {
           // Ziņotā iela atšķiras no pašreizējās ielas.
-          // Lai novērstu šķērsojamo ielu spamu krustojumos, kur GPS uz 1 sekundi pieskaras šķērsielai:
-          // Jaunā iela tiek apstiprināta tikai tad, ja tā novērota vismaz streetChangeConfirmations secīgus atjauninājumus.
+          // Lai novērstu šķērsojamo ielu spamu krustojumos:
+          // Uzkrājam faktiski nobraukto distanci metros pa jauno ielu.
           if (_pendingStreetCandidate == normalizedNewStreet) {
             _pendingStreetConfirmations++;
+            if (latitude != null && longitude != null && _lastCandidateLat != null && _lastCandidateLon != null) {
+              final stepDist = calculateDistanceMeters(_lastCandidateLat!, _lastCandidateLon!, latitude, longitude);
+              // Aizsargājamies pret teleportācijas kļūdām (> 150m vienā solī)
+              if (stepDist > 0 && stepDist < 150.0) {
+                _pendingStreetDistanceMeters += stepDist;
+              }
+            }
           } else {
             _pendingStreetCandidate = normalizedNewStreet;
             _pendingStreetConfirmations = 1;
+            _pendingStreetDistanceMeters = 0.0;
           }
+          _lastCandidateLat = latitude;
+          _lastCandidateLon = longitude;
 
-          if (_pendingStreetConfirmations >= streetChangeConfirmations) {
-            // Apstiprināts, ka lietotājs tiešām ir nogriezies uz jauno ielu!
+          // Jaunā iela tiek apstiprināta tikai tad, ja:
+          // 1) Ar GPS koordinātām un ieslēgtu distanci: nobraukta distance >= streetChangeDistanceMeters (piem. 35m)
+          //    UN saņemti vismaz streetChangeConfirmations atsevišķi punkti.
+          // 2) Bez koordinātām vai ar distanci <= 0: streetChangeConfirmations.
+          final bool hasCoordsAndDistance = (latitude != null && longitude != null && streetChangeDistanceMeters > 0);
+          final bool isDistanceMet = hasCoordsAndDistance
+              ? (_pendingStreetDistanceMeters >= streetChangeDistanceMeters && _pendingStreetConfirmations >= streetChangeConfirmations)
+              : (_pendingStreetConfirmations >= streetChangeConfirmations);
+
+          if (isDistanceMet) {
+            // Apstiprināts, ka lietotājs tiešām ir nogriezies uz jauno ielu un nobraucis nepieciešamo distanci!
             _currentStreetName = normalizedNewStreet;
             _pendingStreetCandidate = null;
             _pendingStreetConfirmations = 0;
+            _pendingStreetDistanceMeters = 0.0;
+            _lastCandidateLat = null;
+            _lastCandidateLon = null;
 
             if (announceStreetChanges) {
               final alreadyHasAlert = events.any((e) =>
@@ -510,6 +570,9 @@ class VoiceAssistantStateMachine {
         // Lietotājs ir uz tās pašas ielas vai atgriezās atpakaļ pēc krustojuma šķērsošanas
         _pendingStreetCandidate = null;
         _pendingStreetConfirmations = 0;
+        _pendingStreetDistanceMeters = 0.0;
+        _lastCandidateLat = null;
+        _lastCandidateLon = null;
       }
     }
 

@@ -299,6 +299,7 @@ class DrivingAssistantManager extends ChangeNotifier {
       toleranceMode: settingsService.speedToleranceMode,
       speedTolerancePercentage: settingsService.speedTolerancePercentage,
       speedWarningInterval: settingsService.speedWarningInterval,
+      streetChangeDistanceMeters: settingsService.streetChangeDistanceMeters,
       streetChangeConfirmations: settingsService.streetChangeConfirmations,
       speedRestorationConfirmations: settingsService.speedRestorationConfirmations,
       oneWayExitConfirmations: settingsService.oneWayExitConfirmations,

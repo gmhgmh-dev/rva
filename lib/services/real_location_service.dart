@@ -241,11 +241,6 @@ class RealLocationService {
             hasSpeedCameraAhead: roadAttrs.hasSpeedCamera || (lookaheadAttrs?.hasSpeedCamera ?? false),
             speedCameraLimitAhead: roadAttrs.speedCameraLimit ?? lookaheadAttrs?.speedCameraLimit,
           ));
-
-          // If PMTiles tile lacked explicit maxspeed, concurrently query Overpass to verify
-          if (roadAttrs.maxspeed == null) {
-            _fetchOverpassAttributesConcurrently(lat, lon, position, speedKmh);
-          }
           return;
         }
       } catch (e) {

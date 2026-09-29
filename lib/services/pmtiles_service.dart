@@ -293,7 +293,7 @@ class PMTilesService {
         final distLivingMeters = sqrt(minLivingGeoDistSq) * metersPerPixelLiving;
 
         if (distLivingMeters <= effectiveCourtyardRadius) {
-          if (!onEstablishedNamedRoad || distNamedMeters > 20.0) {
+          if (!onEstablishedNamedRoad || distNamedMeters > 30.0) {
             final props = closestLivingFeature.decodeProperties();
             return _extractRoadAttributes(props, distLivingMeters);
           }

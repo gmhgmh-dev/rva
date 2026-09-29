@@ -649,11 +649,11 @@ void main() {
         announceStreetChanges: true,
       );
 
-      // Points 1, 2, 3 on Ganību iela (cross street touched for 3 seconds)
+      // Points 1, 2, 3 on Ganību iela (traveling 22m, below 35m threshold and below 4 confirmations)
       for (var i = 1; i <= 3; i++) {
         final events = stateMachine.processRoadPoint(
           RoadPoint(
-            latitude: 57.3940,
+            latitude: 57.3940 + (i - 1) * 0.0001,
             longitude: 21.5640,
             vehicleSpeedKmh: 20.0,
             maxSpeedLimitKmh: 50,
@@ -669,10 +669,10 @@ void main() {
         expect(stateMachine.currentStreetName, equals('Kārļa iela'));
       }
 
-      // Point 4: 4th consecutive point confirms turn into Ganību iela
+      // Point 4: 4th consecutive point reaches 44m (> 35m) and confirms turn into Ganību iela
       final finalEvents = stateMachine.processRoadPoint(
         RoadPoint(
-          latitude: 57.3942,
+          latitude: 57.3944,
           longitude: 21.5640,
           vehicleSpeedKmh: 20.0,
           maxSpeedLimitKmh: 50,
@@ -792,6 +792,137 @@ void main() {
 
       expect(finalEvents.where((e) => e.type == VoiceAlertType.oneWayExited).length, equals(1));
       expect(stateMachine.isOneWay, isFalse);
+    });
+
+    test('E-scooter crossing an intersection (15m along cross-street) does NOT trigger street change', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Jūras iela',
+        announceStreetChanges: true,
+      );
+
+      // Rider travels across Saules iela intersection for 3 seconds (~15m traveled)
+      // Lat moves 0.00014 deg (~15.5 meters)
+      final p1 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          timestamp: DateTime.now(),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      expect(p1.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+      expect(stateMachine.currentStreetName, equals('Jūras iela'));
+
+      final p2 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39814,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 3)),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      // Even after 2 points on Saules iela, only 15.5m covered (< 35m) -> NO ALERT!
+      expect(p2.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+      expect(stateMachine.currentStreetName, equals('Jūras iela'));
+      expect(stateMachine.pendingStreetDistanceMeters, closeTo(15.5, 1.0));
+
+      // Next point returns to Jūras iela
+      final p3 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39830,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Jūras iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 5)),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      // Candidate reset to 0m and current street remains Jūras iela
+      expect(p3.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+      expect(stateMachine.currentStreetName, equals('Jūras iela'));
+      expect(stateMachine.pendingStreetDistanceMeters, equals(0.0));
+    });
+
+    test('E-scooter turning into new street and traveling > 35m confirms street change', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Jūras iela',
+        announceStreetChanges: true,
+      );
+
+      // Point 1: Enters Saules iela
+      final p1 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          timestamp: DateTime.now(),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      expect(p1.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+
+      // Point 2: Rides 40m down Saules iela (0.00036 deg lat = 40.0m)
+      final p2 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39836,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 8)),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      // Confirmed! Traveled 40m >= 35m threshold
+      final changeEvents = p2.where((e) => e.type == VoiceAlertType.streetChanged).toList();
+      expect(changeEvents.length, equals(1));
+      expect(changeEvents.first.spokenText, contains('Saules iela'));
+      expect(stateMachine.currentStreetName, equals('Saules iela'));
+      expect(stateMachine.pendingStreetDistanceMeters, equals(0.0));
+    });
+
+    test('Stopped at red light (speed < 3.5 km/h) resets candidate distance', () {
+      final stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Jūras iela',
+        announceStreetChanges: true,
+      );
+
+      // Rider stops at red light (speed = 1.0 km/h) and GPS wobbles to Saules iela
+      final p1 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39800,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 1.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          timestamp: DateTime.now(),
+        ),
+        streetChangeDistanceMeters: 35.0,
+      );
+      expect(p1.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+      expect(stateMachine.currentStreetName, equals('Jūras iela'));
+      expect(stateMachine.pendingStreetDistanceMeters, equals(0.0));
     });
   });
 }

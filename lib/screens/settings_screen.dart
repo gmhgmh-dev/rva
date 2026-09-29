@@ -488,6 +488,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
             const SizedBox(height: 12),
+            _buildRadiusTile(
+              context: context,
+              title: 'Jaunas ielas apstiprināšanas distance (metros)',
+              subtitle: 'Ieteicamais: 35 m (skrejriteņiem un auto). Lai asistents paziņotu jaunu ielu, pa to reāli jānobrauc vismaz šis attālums. Pilnībā novērš šķērsielu paziņošanu krustojumos un stāvot pie luksofora.',
+              value: settings.streetChangeDistanceMeters,
+              min: 15,
+              max: 80,
+              defaultValue: 35.0,
+              onChanged: (val) => settings.setStreetChangeDistanceMeters(val),
+            ),
+            const SizedBox(height: 12),
             _buildCountTile(
               context: context,
               title: 'Ielas maiņas apstiprinājumu skaits',
