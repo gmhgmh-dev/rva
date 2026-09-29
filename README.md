@@ -70,7 +70,7 @@ Lietotne sniedz savlaicīgus, lakoniskus balss paziņojumus par atļauto braukš
 
 ## 📊 Versiju vēsture
 
-Pilns izmaiņu reģistrs pieejams [CHANGELOG.md](CHANGELOG.md) un [docs/RVA_DEVELOPMENT_LOG.md](docs/RVA_DEVELOPMENT_LOG.md).
+Pilns izmaiņu reģistrs pieejams [CHANGELOG.md](CHANGELOG.md).
 
 - **v0.2.1** (2026-09-29): Krustojumu histerēze, stabilitātes filtri, iestatījumu slīdņi, Gemini Pro 3.1 koda audita labojumi (Wakelock, TTS anti-deadlock, clamp).
 - **v0.2.0** (2026-09-28): Ātruma tolerances sliekšņi, velo/gājēju ceļi, GPX maršrutu simulācija un reāllaika žurnāli.
