@@ -103,6 +103,29 @@ class VoiceAssistantStateMachine {
     _lastSpeedCameraAlertTime = null;
   }
 
+  /// Returns a cleaned street name if valid, or null if unnamed / generic driveway.
+  static String? cleanStreetName(String? streetName) {
+    if (streetName == null) return null;
+    final trimmed = streetName.trim();
+    if (trimmed.isEmpty ||
+        trimmed == 'Pilsētas ceļš' ||
+        trimmed == 'Pagalma brauktuve' ||
+        trimmed == 'Dzīvojamā zona' ||
+        trimmed == 'Dzīvojamais rajons' ||
+        trimmed == 'Iela') {
+      return null;
+    }
+    return trimmed;
+  }
+
+  /// Checks if two street names represent the same valid street.
+  static bool areSameStreets(String? street1, String? street2) {
+    final s1 = cleanStreetName(street1);
+    final s2 = cleanStreetName(street2);
+    if (s1 == null || s2 == null) return false;
+    return s1.toLowerCase() == s2.toLowerCase();
+  }
+
   /// Formats dynamic street and speed limit announcement:
   /// "Atrodaties uz [street_name]. Atļautais ātrums [max_speed] kilometri stundā."
   /// Or "Atrodaties uz neidentificēta ceļa. Atļautais ātrums [max_speed] kilometri stundā."
@@ -110,20 +133,46 @@ class VoiceAssistantStateMachine {
     String? streetName,
     required int maxSpeed,
   }) {
-    final name = (streetName != null &&
-            streetName.trim().isNotEmpty &&
-            streetName.trim() != 'Pilsētas ceļš' &&
-            streetName.trim() != 'Pagalma brauktuve' &&
-            streetName.trim() != 'Dzīvojamā zona' &&
-            streetName.trim() != 'Dzīvojamais rajons' &&
-            streetName.trim() != 'Iela')
-        ? streetName.trim()
-        : null;
+    final name = cleanStreetName(streetName);
 
     if (name != null) {
       return 'Atrodaties uz $name. Atļautais ātrums $maxSpeed kilometri stundā.';
     } else {
       return 'Atrodaties uz neidentificēta ceļa. Atļautais ātrums $maxSpeed kilometri stundā.';
+    }
+  }
+
+  /// Formats speed reduction announcement.
+  /// If on the same street, announces the restriction concisely without repeating the street name:
+  /// "Ātruma ierobežojums [maxSpeed] kilometri stundā."
+  /// If on a new street, announces the street name and the speed limit:
+  /// "Atrodaties uz [streetName]. Atļautais ātrums [maxSpeed] kilometri stundā."
+  static String formatSpeedReductionAnnouncement({
+    String? streetName,
+    required int maxSpeed,
+    bool isSameStreet = false,
+  }) {
+    final validName = cleanStreetName(streetName);
+    if (isSameStreet || validName == null) {
+      return 'Ātruma ierobežojums $maxSpeed kilometri stundā.';
+    } else {
+      return 'Atrodaties uz $validName. Atļautais ātrums $maxSpeed kilometri stundā.';
+    }
+  }
+
+  /// Formats speed restored announcement when returning to standard speed limit (e.g. 50 km/h).
+  /// Without verbosity, announces the restriction ended followed by the street name:
+  /// "Ātruma ierobežojums ir beidzies. [streetName]."
+  /// Or "Ātruma ierobežojums ir beidzies." if unnamed.
+  static String formatSpeedRestoredAnnouncement({
+    String? streetName,
+    required int maxSpeed,
+  }) {
+    final validName = cleanStreetName(streetName);
+    if (validName != null) {
+      return 'Ātruma ierobežojums ir beidzies. $validName.';
+    } else {
+      return 'Ātruma ierobežojums ir beidzies.';
     }
   }
 
@@ -365,8 +414,13 @@ class VoiceAssistantStateMachine {
             );
           } else {
             _isIn30SpeedZone = false;
+            final isSame = areSameStreets(_currentStreetName, streetName);
             final spoken = useDynamicPhrases
-                ? formatStreetAnnouncement(streetName: streetName, maxSpeed: effectiveSpeed)
+                ? formatSpeedReductionAnnouncement(
+                    streetName: streetName,
+                    maxSpeed: effectiveSpeed,
+                    isSameStreet: isSame,
+                  )
                 : 'Samazināts ātruma ierobežojums: $effectiveSpeed kilometri stundā.';
             events.add(
               VoiceAlertEvent(
@@ -406,7 +460,10 @@ class VoiceAssistantStateMachine {
               );
             } else {
               // Parasta ielas posma beigas dinamiskajā režīmā (atgriežas 50 km/h uz ielas, nevis zonas beigas)
-              final spoken = formatStreetAnnouncement(streetName: streetName, maxSpeed: effectiveSpeed);
+              final spoken = formatSpeedRestoredAnnouncement(
+                streetName: streetName,
+                maxSpeed: effectiveSpeed,
+              );
               events.add(
                 VoiceAlertEvent(
                   type: VoiceAlertType.speedRestored,

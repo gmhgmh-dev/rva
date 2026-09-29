@@ -411,7 +411,7 @@ void main() {
       expect(stateMachine.currentMaxSpeed, equals(50));
     });
 
-    test('Single 30 km/h section (isZone == false) in dynamic mode announces street & limit on entry and speedRestored on exit', () {
+    test('Single 30 km/h section (isZone == false) on SAME street in dynamic mode announces concise restriction on entry and street on exit', () {
       final dynamicStateMachine = VoiceAssistantStateMachine(
         initialMaxSpeed: 50,
         initialIsOneWay: false,
@@ -420,7 +420,7 @@ void main() {
         useDynamicPhrases: true,
       );
 
-      // Enter isolated 30 km/h segment (ceļa zīme 323, isZone = false)
+      // Enter isolated 30 km/h segment on SAME street (ceļa zīme 323, isZone = false)
       final entryEvents = dynamicStateMachine.processRoadPoint(
         RoadPoint(
           latitude: 57.3925,
@@ -436,11 +436,12 @@ void main() {
 
       expect(entryEvents.length, equals(1));
       expect(entryEvents.first.type, equals(VoiceAlertType.speedReduced));
-      expect(entryEvents.first.spokenText, equals('Atrodaties uz Sarkanmuižas dambis. Atļautais ātrums 30 kilometri stundā.'));
+      // Concise Latvian announcement without repeating street name when already on that street
+      expect(entryEvents.first.spokenText, equals('Ātruma ierobežojums 30 kilometri stundā.'));
       expect(dynamicStateMachine.isIn30SpeedZone, isFalse);
       expect(dynamicStateMachine.isInReducedSpeedZone, isTrue);
 
-      // Exit isolated 30 km/h segment back to 50 km/h (speedRestored, NOT speedZoneEnded)
+      // Exit isolated 30 km/h segment back to 50 km/h on same street (speedRestored, NOT speedZoneEnded)
       final exitEvents = dynamicStateMachine.processRoadPoint(
         RoadPoint(
           latitude: 57.3936,
@@ -456,10 +457,86 @@ void main() {
 
       expect(exitEvents.length, equals(1));
       expect(exitEvents.first.type, equals(VoiceAlertType.speedRestored));
-      expect(exitEvents.first.spokenText, equals('Atrodaties uz Sarkanmuižas dambis. Atļautais ātrums 50 kilometri stundā.'));
+      // Concise exit announcement stating restriction ended followed by street name
+      expect(exitEvents.first.spokenText, equals('Ātruma ierobežojums ir beidzies. Sarkanmuižas dambis.'));
       expect(dynamicStateMachine.isIn30SpeedZone, isFalse);
       expect(dynamicStateMachine.isInReducedSpeedZone, isFalse);
       expect(dynamicStateMachine.currentMaxSpeed, equals(50));
+    });
+
+    test('Speed reduction when turning onto a NEW street in dynamic mode announces street and limit', () {
+      final dynamicStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+      );
+
+      // Turning onto a new street (Kuldīgas iela) with 30 km/h limit
+      final entryEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3925,
+          longitude: 21.5730,
+          vehicleSpeedKmh: 25,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(entryEvents.length, equals(1));
+      expect(entryEvents.first.type, equals(VoiceAlertType.speedReduced));
+      // Full announcement because driver entered a new street
+      expect(entryEvents.first.spokenText, equals('Atrodaties uz Kuldīgas iela. Atļautais ātrums 30 kilometri stundā.'));
+    });
+
+    test('Speed reduction on unnamed driveway or generic road announces restriction without verbose fallback', () {
+      final dynamicStateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: null,
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+      );
+
+      // Speed reduction on unnamed road
+      final entryEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3925,
+          longitude: 21.5730,
+          vehicleSpeedKmh: 20,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Pilsētas ceļš',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(entryEvents.length, equals(1));
+      expect(entryEvents.first.type, equals(VoiceAlertType.speedReduced));
+      expect(entryEvents.first.spokenText, equals('Ātruma ierobežojums 30 kilometri stundā.'));
+
+      // Speed restored on unnamed road
+      final exitEvents = dynamicStateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.3930,
+          longitude: 21.5740,
+          vehicleSpeedKmh: 48,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Pilsētas ceļš',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(exitEvents.length, equals(1));
+      expect(exitEvents.first.type, equals(VoiceAlertType.speedRestored));
+      expect(exitEvents.first.spokenText, equals('Ātruma ierobežojums ir beidzies.'));
     });
 
     test('Progressive percentage speed tolerance warns at +1 km/h for 20 km/h, and +4.5 km/h for 90 km/h', () {
