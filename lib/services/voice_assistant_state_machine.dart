@@ -31,6 +31,9 @@ class VoiceAssistantStateMachine {
   int _pendingStreetConfirmations = 0;
   int _pendingSpeedRestorationConfirmations = 0;
   int _pendingOneWayExitConfirmations = 0;
+  int? _lastLookaheadAlertedLimit;
+  DateTime? _lastTrafficCalmingAlertTime;
+  DateTime? _lastSpeedCameraAlertTime;
   bool announceStreetChanges;
   bool useDynamicPhrases;
 
@@ -73,6 +76,9 @@ class VoiceAssistantStateMachine {
     _pendingStreetConfirmations = 0;
     _pendingSpeedRestorationConfirmations = 0;
     _pendingOneWayExitConfirmations = 0;
+    _lastLookaheadAlertedLimit = null;
+    _lastTrafficCalmingAlertTime = null;
+    _lastSpeedCameraAlertTime = null;
   }
 
   /// Formats dynamic street and speed limit announcement:
@@ -111,6 +117,27 @@ class VoiceAssistantStateMachine {
     return 'Iebraucāt $speedLimit kilometru stundā ātruma ierobežojuma zonā.';
   }
 
+  /// Formats lookahead lower speed announcement:
+  /// "Pēc [distance] metriem ātruma ierobežojums [maxSpeed] kilometri stundā."
+  static String formatLookaheadSpeedAnnouncement(int maxSpeed, int distanceMeters) {
+    return 'Pēc $distanceMeters metriem ātruma ierobežojums $maxSpeed kilometri stundā.';
+  }
+
+  /// Formats traffic calming announcement:
+  /// "Uzmanību, priekšā ātrumvalnis."
+  static String formatTrafficCalmingAnnouncement([String? type]) {
+    return 'Uzmanību, priekšā ātrumvalnis.';
+  }
+
+  /// Formats speed camera announcement:
+  /// "Priekšā fotoradars, atļautais ātrums [maxSpeed]." or "Uzmanību, priekšā fotoradars."
+  static String formatSpeedCameraAnnouncement([int? maxSpeed]) {
+    if (maxSpeed != null && maxSpeed > 0) {
+      return 'Priekšā fotoradars, atļautais ātrums $maxSpeed kilometri stundā.';
+    }
+    return 'Uzmanību, priekšā fotoradars.';
+  }
+
   bool _isSpeeding = false;
   DateTime? _lastSpeedingWarningTime;
 
@@ -124,6 +151,9 @@ class VoiceAssistantStateMachine {
     int streetChangeConfirmations = 2,
     int speedRestorationConfirmations = 1,
     int oneWayExitConfirmations = 1,
+    bool lookaheadAlertsEnabled = false,
+    bool trafficCalmingAlertsEnabled = false,
+    bool speedCameraAlertsEnabled = false,
   }) {
     return processUpdate(
       newMaxSpeed: point.maxSpeedLimitKmh,
@@ -143,6 +173,15 @@ class VoiceAssistantStateMachine {
       streetChangeConfirmations: streetChangeConfirmations,
       speedRestorationConfirmations: speedRestorationConfirmations,
       oneWayExitConfirmations: oneWayExitConfirmations,
+      lookaheadMaxSpeed: point.lookaheadMaxSpeed,
+      lookaheadDistanceMeters: point.lookaheadDistanceMeters,
+      lookaheadAlertsEnabled: lookaheadAlertsEnabled,
+      hasTrafficCalmingAhead: point.hasTrafficCalmingAhead,
+      trafficCalmingAheadType: point.trafficCalmingAheadType,
+      trafficCalmingAlertsEnabled: trafficCalmingAlertsEnabled,
+      hasSpeedCameraAhead: point.hasSpeedCameraAhead,
+      speedCameraLimitAhead: point.speedCameraLimitAhead,
+      speedCameraAlertsEnabled: speedCameraAlertsEnabled,
     );
   }
 
@@ -165,6 +204,15 @@ class VoiceAssistantStateMachine {
     int streetChangeConfirmations = 2,
     int speedRestorationConfirmations = 1,
     int oneWayExitConfirmations = 1,
+    int? lookaheadMaxSpeed,
+    double? lookaheadDistanceMeters,
+    bool lookaheadAlertsEnabled = false,
+    bool hasTrafficCalmingAhead = false,
+    String? trafficCalmingAheadType,
+    bool trafficCalmingAlertsEnabled = false,
+    bool hasSpeedCameraAhead = false,
+    int? speedCameraLimitAhead,
+    bool speedCameraAlertsEnabled = false,
   }) {
     final now = timestamp ?? DateTime.now();
     final events = <VoiceAlertEvent>[];
@@ -493,6 +541,68 @@ class VoiceAssistantStateMachine {
         }
       } else {
         _isSpeeding = false;
+      }
+    }
+
+    // 6. APSTEIDZOŠIE BRĪDINĀJUMI (Lookahead)
+    if (lookaheadAlertsEnabled && lookaheadMaxSpeed != null && effectiveSpeed != null) {
+      // Only alert if upcoming speed limit is LOWER than our current speed limit (e.g. 50 -> 30 or 50 -> 20)
+      if (lookaheadMaxSpeed < effectiveSpeed && _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
+        final dist = ((lookaheadDistanceMeters ?? 70.0) / 10.0).round() * 10;
+        _lastLookaheadAlertedLimit = lookaheadMaxSpeed;
+        events.add(
+          VoiceAlertEvent(
+            type: VoiceAlertType.lookaheadSpeedReduced,
+            spokenText: formatLookaheadSpeedAnnouncement(lookaheadMaxSpeed, dist.clamp(30, 150)),
+            timestamp: now,
+            speedLimitKmh: lookaheadMaxSpeed,
+            isOneWay: newIsOneWay ?? _isOneWay,
+            streetName: streetName ?? _currentStreetName,
+          ),
+        );
+      }
+    }
+
+    // Reset lookahead alert tracking when vehicle has transitioned to that speed
+    if (_lastLookaheadAlertedLimit != null && effectiveSpeed == _lastLookaheadAlertedLimit) {
+      _lastLookaheadAlertedLimit = null;
+    }
+
+    // 7. ĀTRUMVAĻŅI (Traffic Calming)
+    if (trafficCalmingAlertsEnabled && hasTrafficCalmingAhead) {
+      final shouldAlert = _lastTrafficCalmingAlertTime == null ||
+          now.difference(_lastTrafficCalmingAlertTime!).inSeconds >= 45;
+      if (shouldAlert) {
+        _lastTrafficCalmingAlertTime = now;
+        events.add(
+          VoiceAlertEvent(
+            type: VoiceAlertType.trafficCalmingAhead,
+            spokenText: formatTrafficCalmingAnnouncement(trafficCalmingAheadType),
+            timestamp: now,
+            speedLimitKmh: effectiveSpeed,
+            isOneWay: newIsOneWay ?? _isOneWay,
+            streetName: streetName ?? _currentStreetName,
+          ),
+        );
+      }
+    }
+
+    // 8. FOTORADARI (Speed Enforcement Camera)
+    if (speedCameraAlertsEnabled && hasSpeedCameraAhead) {
+      final shouldAlert = _lastSpeedCameraAlertTime == null ||
+          now.difference(_lastSpeedCameraAlertTime!).inSeconds >= 60;
+      if (shouldAlert) {
+        _lastSpeedCameraAlertTime = now;
+        events.add(
+          VoiceAlertEvent(
+            type: VoiceAlertType.speedCameraAhead,
+            spokenText: formatSpeedCameraAnnouncement(speedCameraLimitAhead ?? effectiveSpeed),
+            timestamp: now,
+            speedLimitKmh: speedCameraLimitAhead ?? effectiveSpeed,
+            isOneWay: newIsOneWay ?? _isOneWay,
+            streetName: streetName ?? _currentStreetName,
+          ),
+        );
       }
     }
 

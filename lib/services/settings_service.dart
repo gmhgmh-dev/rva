@@ -27,6 +27,11 @@ class SettingsService extends ChangeNotifier {
   static const _keyFilterStaleGpsFixes = 'filter_stale_gps_fixes';
   static const _keyStaleGpsTimeoutSeconds = 'stale_gps_timeout_seconds';
   static const _keyPrioritizePedestrianAndCycleways = 'prioritize_pedestrian_cycleways';
+  static const _keyAudioDucking = 'audio_ducking';
+  static const _keyLookaheadAlerts = 'lookahead_alerts';
+  static const _keyLookaheadDistanceMeters = 'lookahead_distance_meters';
+  static const _keyTrafficCalmingAlerts = 'traffic_calming_alerts';
+  static const _keySpeedCameraAlerts = 'speed_camera_alerts';
 
   bool _useDynamicPhrases = true;
   bool _announceStreetChanges = true;
@@ -48,6 +53,11 @@ class SettingsService extends ChangeNotifier {
   bool _filterStaleGpsFixes = true; // Recommended default: true
   int _staleGpsTimeoutSeconds = 5; // Recommended default: 5s
   bool _prioritizePedestrianAndCycleways = false; // Recommended default: false (car mode)
+  bool _audioDucking = true; // Recommended default: true
+  bool _lookaheadAlerts = true; // Recommended default: true
+  double _lookaheadDistanceMeters = 70.0; // Recommended default: 70m
+  bool _trafficCalmingAlerts = true; // Recommended default: true
+  bool _speedCameraAlerts = true; // Recommended default: true
 
   bool get useDynamicPhrases => _useDynamicPhrases;
   bool get announceStreetChanges => _announceStreetChanges;
@@ -69,6 +79,11 @@ class SettingsService extends ChangeNotifier {
   bool get filterStaleGpsFixes => _filterStaleGpsFixes;
   int get staleGpsTimeoutSeconds => _staleGpsTimeoutSeconds;
   bool get prioritizePedestrianAndCycleways => _prioritizePedestrianAndCycleways;
+  bool get audioDucking => _audioDucking;
+  bool get lookaheadAlerts => _lookaheadAlerts;
+  double get lookaheadDistanceMeters => _lookaheadDistanceMeters;
+  bool get trafficCalmingAlerts => _trafficCalmingAlerts;
+  bool get speedCameraAlerts => _speedCameraAlerts;
 
   /// Returns the effective speed tolerance in km/h for a given road speed limit.
   double calculateEffectiveTolerance(int speedLimitKmh) {
@@ -107,6 +122,11 @@ class SettingsService extends ChangeNotifier {
     _filterStaleGpsFixes = prefs.getBool(_keyFilterStaleGpsFixes) ?? true;
     _staleGpsTimeoutSeconds = (prefs.getInt(_keyStaleGpsTimeoutSeconds) ?? 5).clamp(1, 30);
     _prioritizePedestrianAndCycleways = prefs.getBool(_keyPrioritizePedestrianAndCycleways) ?? false;
+    _audioDucking = prefs.getBool(_keyAudioDucking) ?? true;
+    _lookaheadAlerts = prefs.getBool(_keyLookaheadAlerts) ?? true;
+    _lookaheadDistanceMeters = (prefs.getDouble(_keyLookaheadDistanceMeters) ?? 70.0).clamp(30.0, 150.0);
+    _trafficCalmingAlerts = prefs.getBool(_keyTrafficCalmingAlerts) ?? true;
+    _speedCameraAlerts = prefs.getBool(_keySpeedCameraAlerts) ?? true;
     notifyListeners();
   }
 
@@ -247,6 +267,41 @@ class SettingsService extends ChangeNotifier {
     _prioritizePedestrianAndCycleways = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyPrioritizePedestrianAndCycleways, value);
+    notifyListeners();
+  }
+
+  Future<void> setAudioDucking(bool value) async {
+    _audioDucking = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyAudioDucking, value);
+    notifyListeners();
+  }
+
+  Future<void> setLookaheadAlerts(bool value) async {
+    _lookaheadAlerts = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyLookaheadAlerts, value);
+    notifyListeners();
+  }
+
+  Future<void> setLookaheadDistanceMeters(double value) async {
+    _lookaheadDistanceMeters = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyLookaheadDistanceMeters, value);
+    notifyListeners();
+  }
+
+  Future<void> setTrafficCalmingAlerts(bool value) async {
+    _trafficCalmingAlerts = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyTrafficCalmingAlerts, value);
+    notifyListeners();
+  }
+
+  Future<void> setSpeedCameraAlerts(bool value) async {
+    _speedCameraAlerts = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySpeedCameraAlerts, value);
     notifyListeners();
   }
 }

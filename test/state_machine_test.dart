@@ -102,5 +102,87 @@ void main() {
       final events4 = stateMachine.processUpdate(newMaxSpeed: 30, newIsOneWay: true);
       expect(events4.isEmpty, isTrue);
     });
+
+    test('Lookahead lower speed alert triggers when upcoming speed limit is lower', () {
+      // Current street is 50 km/h, lookahead detects 30 km/h at 70 meters ahead
+      final events = stateMachine.processUpdate(
+        newMaxSpeed: 50,
+        newIsOneWay: false,
+        lookaheadAlertsEnabled: true,
+        lookaheadMaxSpeed: 30,
+        lookaheadDistanceMeters: 70,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.lookaheadSpeedReduced));
+      expect(events.first.spokenText, equals('Pēc 70 metriem ātruma ierobežojums 30 kilometri stundā.'));
+      expect(events.first.speedLimitKmh, equals(30));
+
+      // Same lookahead speed ahead does not spam again on subsequent GPS points
+      final nextEvents = stateMachine.processUpdate(
+        newMaxSpeed: 50,
+        newIsOneWay: false,
+        lookaheadAlertsEnabled: true,
+        lookaheadMaxSpeed: 30,
+        lookaheadDistanceMeters: 55,
+      );
+      expect(nextEvents.isEmpty, isTrue);
+    });
+
+    test('Traffic calming ahead triggers alert with debounce', () {
+      final t1 = DateTime(2026, 9, 29, 12, 0, 0);
+      final events = stateMachine.processUpdate(
+        newMaxSpeed: 50,
+        newIsOneWay: false,
+        trafficCalmingAlertsEnabled: true,
+        hasTrafficCalmingAhead: true,
+        trafficCalmingAheadType: 'bump',
+        timestamp: t1,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.trafficCalmingAhead));
+      expect(events.first.spokenText, equals('Uzmanību, priekšā ātrumvalnis.'));
+
+      // 10 seconds later, still near the bump -> suppressed by 45s debounce window
+      final t2 = t1.add(const Duration(seconds: 10));
+      final suppressedEvents = stateMachine.processUpdate(
+        newMaxSpeed: 50,
+        newIsOneWay: false,
+        trafficCalmingAlertsEnabled: true,
+        hasTrafficCalmingAhead: true,
+        timestamp: t2,
+      );
+      expect(suppressedEvents.isEmpty, isTrue);
+
+      // 50 seconds later -> alert fires again
+      final t3 = t1.add(const Duration(seconds: 50));
+      final nextBumpEvents = stateMachine.processUpdate(
+        newMaxSpeed: 50,
+        newIsOneWay: false,
+        trafficCalmingAlertsEnabled: true,
+        hasTrafficCalmingAhead: true,
+        timestamp: t3,
+      );
+      expect(nextBumpEvents.length, equals(1));
+      expect(nextBumpEvents.first.type, equals(VoiceAlertType.trafficCalmingAhead));
+    });
+
+    test('Speed enforcement camera triggers speed camera alert with speed limit', () {
+      final t1 = DateTime(2026, 9, 29, 12, 0, 0);
+      final events = stateMachine.processUpdate(
+        newMaxSpeed: 50,
+        newIsOneWay: false,
+        speedCameraAlertsEnabled: true,
+        hasSpeedCameraAhead: true,
+        speedCameraLimitAhead: 50,
+        timestamp: t1,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.speedCameraAhead));
+      expect(events.first.spokenText, equals('Priekšā fotoradars, atļautais ātrums 50 kilometri stundā.'));
+      expect(events.first.speedLimitKmh, equals(50));
+    });
   });
 }

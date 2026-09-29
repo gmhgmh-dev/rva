@@ -29,6 +29,15 @@ enum VoiceAlertType {
 
   /// Trigger 10: User enters a bicycle or pedestrian path
   pedestrianOrBicycleWayEntered,
+
+  /// Trigger 11: Lookahead lower speed zone warning (e.g. 50-100m ahead)
+  lookaheadSpeedReduced,
+
+  /// Trigger 12: Upcoming traffic calming / speed bump
+  trafficCalmingAhead,
+
+  /// Trigger 13: Upcoming stationary speed enforcement camera
+  speedCameraAhead,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

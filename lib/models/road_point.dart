@@ -15,6 +15,12 @@ class RoadPoint {
   final bool isFootway;
   final bool isPath;
   final double? heading;
+  final int? lookaheadMaxSpeed;
+  final double? lookaheadDistanceMeters;
+  final bool hasTrafficCalmingAhead;
+  final String? trafficCalmingAheadType;
+  final bool hasSpeedCameraAhead;
+  final int? speedCameraLimitAhead;
 
   const RoadPoint({
     required this.latitude,
@@ -31,6 +37,12 @@ class RoadPoint {
     this.isFootway = false,
     this.isPath = false,
     this.heading,
+    this.lookaheadMaxSpeed,
+    this.lookaheadDistanceMeters,
+    this.hasTrafficCalmingAhead = false,
+    this.trafficCalmingAheadType,
+    this.hasSpeedCameraAhead = false,
+    this.speedCameraLimitAhead,
   });
 
   bool get isPedestrianOrBicycle => isCycleway || isFootway || isPath;
@@ -50,6 +62,12 @@ class RoadPoint {
     bool? isFootway,
     bool? isPath,
     double? heading,
+    int? lookaheadMaxSpeed,
+    double? lookaheadDistanceMeters,
+    bool? hasTrafficCalmingAhead,
+    String? trafficCalmingAheadType,
+    bool? hasSpeedCameraAhead,
+    int? speedCameraLimitAhead,
   }) {
     return RoadPoint(
       latitude: latitude ?? this.latitude,
@@ -66,11 +84,17 @@ class RoadPoint {
       isFootway: isFootway ?? this.isFootway,
       isPath: isPath ?? this.isPath,
       heading: heading ?? this.heading,
+      lookaheadMaxSpeed: lookaheadMaxSpeed ?? this.lookaheadMaxSpeed,
+      lookaheadDistanceMeters: lookaheadDistanceMeters ?? this.lookaheadDistanceMeters,
+      hasTrafficCalmingAhead: hasTrafficCalmingAhead ?? this.hasTrafficCalmingAhead,
+      trafficCalmingAheadType: trafficCalmingAheadType ?? this.trafficCalmingAheadType,
+      hasSpeedCameraAhead: hasSpeedCameraAhead ?? this.hasSpeedCameraAhead,
+      speedCameraLimitAhead: speedCameraLimitAhead ?? this.speedCameraLimitAhead,
     );
   }
 
   @override
   String toString() {
-    return 'RoadPoint($streetName, lat: $latitude, lon: $longitude, limit: $maxSpeedLimitKmh km/h, oneWay: $isOneWay, source: $dataSource, cycle: $isCycleway, foot: $isFootway)';
+    return 'RoadPoint($streetName, lat: $latitude, lon: $longitude, limit: $maxSpeedLimitKmh km/h, oneWay: $isOneWay, source: $dataSource, cycle: $isCycleway, foot: $isFootway, lookahead: $lookaheadMaxSpeed)';
   }
 }

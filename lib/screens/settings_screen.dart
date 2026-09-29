@@ -216,6 +216,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (val) => settings.setIsMuted(val),
             ),
             _buildSwitch(
+              title: 'Audio fokuss un mūzikas pieklusināšana (Ducking)',
+              subtitle: 'Paziņojumu laikā automātiski pieklusina Spotify / radio un citus fona audio avotus.',
+              value: settings.audioDucking,
+              onChanged: (val) => settings.setAudioDucking(val),
+            ),
+            _buildSwitch(
               title: 'Dinamiskās frāzes',
               subtitle: 'Izrunā pilnus teikumus ar ātruma vienībām, nevis lakoniskus paziņojumus.',
               value: settings.useDynamicPhrases,
@@ -515,6 +521,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
               defaultValue: 3,
               unit: 'punkti',
               onChanged: (val) => settings.setOneWayExitConfirmations(val),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Apsteidzošie brīdinājumi un bīstamības (Lookahead)',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _buildSwitch(
+              title: 'Apsteidzošā ātruma zonu noteikšana (Lookahead)',
+              subtitle: 'Savlaicīgi paziņo par gaidāmo zemāka ātruma zonu (30 vai 20 km/h) 50–100m pirms iebraukšanas tajā.',
+              value: settings.lookaheadAlerts,
+              onChanged: (val) => settings.setLookaheadAlerts(val),
+            ),
+            if (settings.lookaheadAlerts) ...[
+              const SizedBox(height: 8),
+              _buildRadiusTile(
+                context: context,
+                title: 'Apsteidzošā skenēšanas bāzes distance',
+                subtitle: 'Ieteicamais: 70 m. Distance uz priekšu braukšanas trajektorijā (ātrumā dinamiskā no 35 līdz 120m).',
+                value: settings.lookaheadDistanceMeters,
+                min: 30,
+                max: 150,
+                defaultValue: 70,
+                onChanged: (val) => settings.setLookaheadDistanceMeters(val),
+              ),
+            ],
+            _buildSwitch(
+              title: 'Ātrumvaļņu (traffic_calming) brīdinājumi',
+              subtitle: 'Paziņo par tuvošanos ātrumvaļņiem vai paaugstinātām pārejām no bezsaistes kartes.',
+              value: settings.trafficCalmingAlerts,
+              onChanged: (val) => settings.setTrafficCalmingAlerts(val),
+            ),
+            _buildSwitch(
+              title: 'Fotoradaru brīdinājumi',
+              subtitle: 'Paziņo par stacionārajiem ātruma kontroles radariem un to atļauto ātrumu.',
+              value: settings.speedCameraAlerts,
+              onChanged: (val) => settings.setSpeedCameraAlerts(val),
             ),
             const SizedBox(height: 12),
             _buildSwitch(

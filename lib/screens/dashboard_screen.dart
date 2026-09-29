@@ -1930,6 +1930,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         badgeLabel = 'GĀJĒJU / VELO CEĻŠ';
         alertIcon = Icons.directions_bike_rounded;
         break;
+      case VoiceAlertType.lookaheadSpeedReduced:
+        badgeColor = Colors.purpleAccent;
+        badgeLabel = 'APSTEIDZOŠS ĀTRUMS';
+        alertIcon = Icons.visibility_rounded;
+        break;
+      case VoiceAlertType.trafficCalmingAhead:
+        badgeColor = Colors.amberAccent;
+        badgeLabel = 'ĀTRUMVALNIS';
+        alertIcon = Icons.waves_rounded;
+        break;
+      case VoiceAlertType.speedCameraAhead:
+        badgeColor = Colors.pinkAccent;
+        badgeLabel = 'FOTORADARS';
+        alertIcon = Icons.camera_alt_rounded;
+        break;
     }
 
 

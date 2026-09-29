@@ -25,6 +25,27 @@ class TtsService {
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setPitch(1.0);
 
+      // Configure Audio Ducking & Navigation Audio Attributes (lowers background music/radio volume during speech)
+      try {
+        await _flutterTts.setAudioAttributesForNavigation();
+      } catch (e) {
+        debugPrint('TTS setAudioAttributesForNavigation error: $e');
+      }
+
+      try {
+        await _flutterTts.setSharedInstance(true);
+        await _flutterTts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.duckOthers,
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          ],
+          IosTextToSpeechAudioMode.voicePrompt,
+        );
+      } catch (e) {
+        debugPrint('TTS iOS audio category error: $e');
+      }
+
       _flutterTts.setCompletionHandler(() {
         _isSpeaking = false;
         _processQueue();

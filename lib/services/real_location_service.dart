@@ -198,6 +198,33 @@ class RealLocationService {
           );
           final enrichedAttrs = roadAttrs.copyWith(maxspeed: effectiveSpeed);
 
+          RoadAttributes? lookaheadAttrs;
+          double? lookaheadDist;
+          if (heading != null && speedKmh >= 15.0) {
+            lookaheadDist = PMTilesService.calculateDynamicLookaheadDistance(speedKmh);
+            try {
+              lookaheadAttrs = await pmTilesService!.getLookaheadRoadAttributes(
+                lat,
+                lon,
+                heading: heading,
+                speedKmh: speedKmh,
+                customLookaheadDistance: lookaheadDist,
+              );
+            } catch (_) {}
+          }
+
+          int? lookaheadMaxSpeed;
+          if (lookaheadAttrs != null) {
+            final lookaheadResolvedSpeed = resolveSpeedLimit(
+              lat: lat,
+              lon: lon,
+              explicitMaxspeed: lookaheadAttrs.maxspeed,
+              streetName: lookaheadAttrs.name,
+              roadClass: lookaheadAttrs.roadClass,
+            );
+            lookaheadMaxSpeed = lookaheadResolvedSpeed;
+          }
+
           _updateCache(lat, lon, enrichedAttrs);
           _pointController.add(_createRoadPoint(
             lat: lat,
@@ -207,6 +234,12 @@ class RealLocationService {
             dataSource: 'PMTiles bezsaistes karte',
             timestamp: position.timestamp,
             heading: heading,
+            lookaheadMaxSpeed: lookaheadMaxSpeed,
+            lookaheadDistanceMeters: lookaheadDist,
+            hasTrafficCalmingAhead: roadAttrs.hasTrafficCalming || (lookaheadAttrs?.hasTrafficCalming ?? false),
+            trafficCalmingAheadType: roadAttrs.trafficCalmingType ?? lookaheadAttrs?.trafficCalmingType,
+            hasSpeedCameraAhead: roadAttrs.hasSpeedCamera || (lookaheadAttrs?.hasSpeedCamera ?? false),
+            speedCameraLimitAhead: roadAttrs.speedCameraLimit ?? lookaheadAttrs?.speedCameraLimit,
           ));
 
           // If PMTiles tile lacked explicit maxspeed, concurrently query Overpass to verify
@@ -664,6 +697,12 @@ class RealLocationService {
     required String dataSource,
     DateTime? timestamp,
     double? heading,
+    int? lookaheadMaxSpeed,
+    double? lookaheadDistanceMeters,
+    bool hasTrafficCalmingAhead = false,
+    String? trafficCalmingAheadType,
+    bool hasSpeedCameraAhead = false,
+    int? speedCameraLimitAhead,
   }) {
     String street = (attributes.name != null && attributes.name!.trim().isNotEmpty && attributes.name!.trim().toLowerCase() != 'iela')
         ? attributes.name!.trim()
@@ -695,6 +734,12 @@ class RealLocationService {
       isFootway: attributes.isFootway,
       isPath: attributes.isPath,
       heading: heading,
+      lookaheadMaxSpeed: lookaheadMaxSpeed,
+      lookaheadDistanceMeters: lookaheadDistanceMeters,
+      hasTrafficCalmingAhead: hasTrafficCalmingAhead,
+      trafficCalmingAheadType: trafficCalmingAheadType,
+      hasSpeedCameraAhead: hasSpeedCameraAhead,
+      speedCameraLimitAhead: speedCameraLimitAhead,
     );
   }
 

@@ -136,5 +136,59 @@ void main() {
       // Opposite direction on same road: vehicle 270 deg, road 90 deg -> diff = 0 deg (same line axis)
       expect(PMTilesService.angleDifference(270.0, 90.0), closeTo(0.0, 0.01));
     });
+
+    test('calculateLookaheadCoordinate projects coordinate forward in heading direction', () {
+      const lat = 57.3950;
+      const lon = 21.5600;
+
+      // Project 100 meters North (heading = 0)
+      final northProj = PMTilesService.calculateLookaheadCoordinate(lat, lon, 0.0, 100.0);
+      expect(northProj.lat, greaterThan(lat));
+      expect(northProj.lon, closeTo(lon, 0.00001));
+
+      // Project 100 meters East (heading = 90)
+      final eastProj = PMTilesService.calculateLookaheadCoordinate(lat, lon, 90.0, 100.0);
+      expect(eastProj.lat, closeTo(lat, 0.00001));
+      expect(eastProj.lon, greaterThan(lon));
+    });
+
+    test('calculateDynamicLookaheadDistance scales with speed and clamps between 35m and 120m', () {
+      // < 15 km/h -> 0.0 (inactive)
+      expect(PMTilesService.calculateDynamicLookaheadDistance(0.0), equals(0.0));
+      expect(PMTilesService.calculateDynamicLookaheadDistance(10.0), equals(0.0));
+
+      // 20 km/h = 5.56 m/s * 4.5s = 25m -> clamped to 35m minimum
+      expect(PMTilesService.calculateDynamicLookaheadDistance(20.0), equals(35.0));
+
+      // 50 km/h = 13.89 m/s * 4.5s = ~62.5m
+      expect(PMTilesService.calculateDynamicLookaheadDistance(50.0), closeTo(62.5, 1.0));
+
+      // 90 km/h = 25 m/s * 4.5s = ~112.5m
+      expect(PMTilesService.calculateDynamicLookaheadDistance(90.0), closeTo(112.5, 1.0));
+
+      // 150 km/h -> clamped to 120m maximum
+      expect(PMTilesService.calculateDynamicLookaheadDistance(150.0), equals(120.0));
+    });
+
+    test('extractRoadAttributes extracts traffic_calming and speed_camera tags', () {
+      final service = PMTilesService();
+      final props = <String, VectorTileValue>{
+        'highway': VectorTileValue(stringValue: 'residential'),
+        'traffic_calming': VectorTileValue(stringValue: 'bump'),
+        'name': VectorTileValue(stringValue: 'Kuldīgas iela'),
+      };
+
+      final road = service.extractRoadAttributesForTesting(props, 2.0);
+      expect(road.hasTrafficCalming, isTrue);
+      expect(road.trafficCalmingType, equals('bump'));
+
+      final cameraProps = <String, VectorTileValue>{
+        'highway': VectorTileValue(stringValue: 'speed_camera'),
+        'maxspeed': VectorTileValue(stringValue: '50'),
+      };
+      final cameraRoad = service.extractRoadAttributesForTesting(cameraProps, 2.0);
+      expect(cameraRoad.hasSpeedCamera, isTrue);
+      expect(cameraRoad.speedCameraLimit, equals(50));
+    });
   });
 }

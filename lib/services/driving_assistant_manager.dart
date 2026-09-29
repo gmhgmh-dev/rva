@@ -302,6 +302,9 @@ class DrivingAssistantManager extends ChangeNotifier {
       streetChangeConfirmations: settingsService.streetChangeConfirmations,
       speedRestorationConfirmations: settingsService.speedRestorationConfirmations,
       oneWayExitConfirmations: settingsService.oneWayExitConfirmations,
+      lookaheadAlertsEnabled: settingsService.lookaheadAlerts,
+      trafficCalmingAlertsEnabled: settingsService.trafficCalmingAlerts,
+      speedCameraAlertsEnabled: settingsService.speedCameraAlerts,
     );
 
     // Announce initial street and limit when acquiring the first real GPS fix

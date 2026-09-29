@@ -451,6 +451,20 @@ class PMTilesService {
         (props['source:maxspeed']?.value.toString().toLowerCase().contains('zone') ?? false) ||
         (speedVal?.value.toString().toLowerCase().contains('zone') ?? false);
 
+    // Detect traffic calming (speed bumps / tables)
+    final trafficCalmingVal = props['traffic_calming'] ?? props['traffic:calming'];
+    final bool hasTrafficCalming = trafficCalmingVal != null &&
+        trafficCalmingVal.value.toString().isNotEmpty &&
+        trafficCalmingVal.value.toString().toLowerCase() != 'no' &&
+        trafficCalmingVal.value.toString().toLowerCase() != 'null';
+    final String? trafficCalmingType = hasTrafficCalming ? trafficCalmingVal!.value.toString() : null;
+
+    // Detect stationary speed enforcement camera
+    final bool hasSpeedCamera = rawHighway == 'speed_camera' ||
+        props['enforcement']?.value.toString().toLowerCase() == 'maxspeed' ||
+        props['speed_camera'] != null ||
+        props['camera:type'] != null;
+
     return RoadAttributes(
       maxspeed: maxspeed,
       isOneWay: isOneWay,
@@ -461,6 +475,58 @@ class PMTilesService {
       isCycleway: isCycleway,
       isFootway: isFootway,
       isPath: isPath,
+      hasTrafficCalming: hasTrafficCalming,
+      trafficCalmingType: trafficCalmingType,
+      hasSpeedCamera: hasSpeedCamera,
+      speedCameraLimit: hasSpeedCamera ? maxspeed : null,
+    );
+  }
+
+  /// Calculates a projected coordinate along a vehicle heading (in degrees) by [distanceMeters].
+  static ({double lat, double lon}) calculateLookaheadCoordinate(
+    double lat,
+    double lon,
+    double headingDegrees,
+    double distanceMeters,
+  ) {
+    const metersPerDegreeLat = 111139.0;
+    final headingRad = headingDegrees * pi / 180.0;
+    final deltaLat = (distanceMeters * cos(headingRad)) / metersPerDegreeLat;
+    final latRad = lat * pi / 180.0;
+    final metersPerDegreeLon = metersPerDegreeLat * cos(latRad).abs();
+    final deltaLon = metersPerDegreeLon > 1e-6
+        ? (distanceMeters * sin(headingRad)) / metersPerDegreeLon
+        : 0.0;
+    return (lat: lat + deltaLat, lon: lon + deltaLon);
+  }
+
+  /// Calculates dynamic lookahead distance in meters based on vehicle speed in km/h.
+  static double calculateDynamicLookaheadDistance(double speedKmh, {double defaultDistance = 70.0}) {
+    if (speedKmh < 15.0) return 0.0; // Inactive at very low speeds / maneuvering
+    final speedMs = speedKmh / 3.6;
+    // Lookahead ~4.5 seconds ahead, clamped between 35m and 120m
+    return (speedMs * 4.5).clamp(35.0, 120.0);
+  }
+
+  /// Looks ahead along the heading and queries road attributes ahead.
+  Future<RoadAttributes?> getLookaheadRoadAttributes(
+    double currentLat,
+    double currentLon, {
+    required double heading,
+    required double speedKmh,
+    double? customLookaheadDistance,
+  }) async {
+    final dist = customLookaheadDistance ?? calculateDynamicLookaheadDistance(speedKmh);
+    if (dist <= 0) return null;
+
+    final projected = calculateLookaheadCoordinate(currentLat, currentLon, heading, dist);
+    return getRoadAttributes(
+      projected.lat,
+      projected.lon,
+      vehicleHeading: heading,
+      vehicleSpeedKmh: speedKmh,
+      maxRadiusMeters: 30.0,
+      courtyardRadiusMeters: 15.0,
     );
   }
 

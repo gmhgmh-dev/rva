@@ -9,6 +9,10 @@ class RoadAttributes {
   final bool isCycleway;
   final bool isFootway;
   final bool isPath;
+  final bool hasTrafficCalming;
+  final String? trafficCalmingType;
+  final bool hasSpeedCamera;
+  final int? speedCameraLimit;
 
   const RoadAttributes({
     this.maxspeed,
@@ -20,6 +24,10 @@ class RoadAttributes {
     this.isCycleway = false,
     this.isFootway = false,
     this.isPath = false,
+    this.hasTrafficCalming = false,
+    this.trafficCalmingType,
+    this.hasSpeedCamera = false,
+    this.speedCameraLimit,
   });
 
   bool get isPedestrianOrBicycle => isCycleway || isFootway || isPath;
@@ -34,6 +42,10 @@ class RoadAttributes {
     bool? isCycleway,
     bool? isFootway,
     bool? isPath,
+    bool? hasTrafficCalming,
+    String? trafficCalmingType,
+    bool? hasSpeedCamera,
+    int? speedCameraLimit,
   }) {
     return RoadAttributes(
       maxspeed: maxspeed ?? this.maxspeed,
@@ -45,11 +57,15 @@ class RoadAttributes {
       isCycleway: isCycleway ?? this.isCycleway,
       isFootway: isFootway ?? this.isFootway,
       isPath: isPath ?? this.isPath,
+      hasTrafficCalming: hasTrafficCalming ?? this.hasTrafficCalming,
+      trafficCalmingType: trafficCalmingType ?? this.trafficCalmingType,
+      hasSpeedCamera: hasSpeedCamera ?? this.hasSpeedCamera,
+      speedCameraLimit: speedCameraLimit ?? this.speedCameraLimit,
     );
   }
 
   @override
   String toString() {
-    return 'RoadAttributes(name: $name, maxspeed: $maxspeed, oneway: $isOneWay, distance: ${distanceMeters?.toStringAsFixed(1)}m, class: $roadClass, cycleway: $isCycleway, footway: $isFootway)';
+    return 'RoadAttributes(name: $name, maxspeed: $maxspeed, oneway: $isOneWay, distance: ${distanceMeters?.toStringAsFixed(1)}m, class: $roadClass, cycleway: $isCycleway, footway: $isFootway, bump: $hasTrafficCalming, camera: $hasSpeedCamera)';
   }
 }
