@@ -132,7 +132,8 @@ jobs:
           if os.path.exists(rel_apk):
               dest = os.path.join(apk_dir, std_name)
               shutil.copy2(rel_apk, dest)
-              print(f"Copied {rel_apk} -> {dest}")
+              os.remove(rel_apk)
+              print(f"Standardized {rel_apk} -> {dest} and removed raw APK")
           EOF
 
       - name: Upload APK
