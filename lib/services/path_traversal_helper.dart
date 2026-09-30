@@ -220,7 +220,101 @@ class PathTraversalHelper {
       accumulatedDistanceMeters += segLengthMeters;
     }
 
-    return events;
+    return filterByHierarchy(events);
+  }
+
+  /// Filters lookahead events by CSN priority hierarchy within spatial clusters (25m threshold).
+  ///
+  /// CSN Priority Hierarchy:
+  /// 1. Traffic Light (`trafficLight`) - suppresses all signs and intersection reminders
+  /// 2. Stop Sign (`stopSign`) - suppresses give way and intersection reminders
+  /// 3. Give Way (`giveWay`) - suppresses intersection reminders
+  /// 4. Main Road turns (`mainRoadTurnsRight`, `mainRoadTurnsLeft`)
+  /// 5. Main Road Reminder (`mainRoadReminder`)
+  /// 6. Equal Intersection (`equalIntersection`)
+  static List<LookaheadEvent> filterByHierarchy(
+    List<LookaheadEvent> rawEvents, {
+    double clusterThresholdMeters = 25.0,
+  }) {
+    if (rawEvents.length <= 1) return rawEvents;
+
+    // 1. Sort by distance along the path
+    final sorted = List<LookaheadEvent>.from(rawEvents)
+      ..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+
+    // 2. Group into spatial clusters within clusterThresholdMeters
+    final List<List<LookaheadEvent>> clusters = [];
+    List<LookaheadEvent> currentCluster = [];
+
+    for (final event in sorted) {
+      if (currentCluster.isEmpty) {
+        currentCluster.add(event);
+      } else {
+        if ((event.distanceMeters - currentCluster.first.distanceMeters).abs() <= clusterThresholdMeters) {
+          currentCluster.add(event);
+        } else {
+          clusters.add(currentCluster);
+          currentCluster = [event];
+        }
+      }
+    }
+    if (currentCluster.isNotEmpty) {
+      clusters.add(currentCluster);
+    }
+
+    // 3. For each cluster, pick the single dominant event by CSN priority among intersection controls
+    final List<LookaheadEvent> result = [];
+    for (final cluster in clusters) {
+      final intersectionEvents = cluster.where((e) => _isIntersectionControl(e.type)).toList();
+      final nonIntersectionEvents = cluster.where((e) => !_isIntersectionControl(e.type)).toList();
+
+      if (intersectionEvents.isNotEmpty) {
+        intersectionEvents.sort((a, b) => _priorityRank(a.type).compareTo(_priorityRank(b.type)));
+        result.add(intersectionEvents.first);
+      }
+      result.addAll(nonIntersectionEvents);
+    }
+
+    return result;
+  }
+
+  static bool _isIntersectionControl(LookaheadEventType type) {
+    switch (type) {
+      case LookaheadEventType.trafficLight:
+      case LookaheadEventType.stopSign:
+      case LookaheadEventType.giveWay:
+      case LookaheadEventType.mainRoadTurnsRight:
+      case LookaheadEventType.mainRoadTurnsLeft:
+      case LookaheadEventType.mainRoadReminder:
+      case LookaheadEventType.equalIntersection:
+        return true;
+      case LookaheadEventType.speedLimitChange:
+      case LookaheadEventType.trafficCalming:
+      case LookaheadEventType.speedCamera:
+        return false;
+    }
+  }
+
+  static int _priorityRank(LookaheadEventType type) {
+    switch (type) {
+      case LookaheadEventType.trafficLight:
+        return 1;
+      case LookaheadEventType.stopSign:
+        return 2;
+      case LookaheadEventType.giveWay:
+        return 3;
+      case LookaheadEventType.mainRoadTurnsRight:
+      case LookaheadEventType.mainRoadTurnsLeft:
+        return 4;
+      case LookaheadEventType.mainRoadReminder:
+        return 5;
+      case LookaheadEventType.equalIntersection:
+        return 6;
+      case LookaheadEventType.speedCamera:
+      case LookaheadEventType.speedLimitChange:
+      case LookaheadEventType.trafficCalming:
+        return 7;
+    }
   }
 
   // --- Helpers ---

@@ -2,6 +2,7 @@ import 'dart:math';
 import '../models/lookahead_event.dart';
 import '../models/road_point.dart';
 import '../models/voice_alert_event.dart';
+import 'path_traversal_helper.dart';
 import 'settings_service.dart';
 
 /// State Machine that tracks:
@@ -1100,7 +1101,8 @@ class VoiceAssistantStateMachine {
     }
 
     // 9. JAUNIE LOOKAHEAD EVENTI (Traffic Lights, Give Way, Intersections)
-    for (final lookaheadEvent in lookaheadEvents) {
+    final filteredLookahead = PathTraversalHelper.filterByHierarchy(lookaheadEvents);
+    for (final lookaheadEvent in filteredLookahead) {
       bool canAnnounce = true;
       if (_lastLookaheadEventTimes.containsKey(lookaheadEvent.type)) {
          final timeSinceLast = now.difference(_lastLookaheadEventTimes[lookaheadEvent.type]!).inSeconds;
@@ -1172,6 +1174,7 @@ class VoiceAssistantStateMachine {
              isOneWay: _isOneWay,
              streetName: streetName ?? _currentStreetName,
           ));
+          break; // Announce at most one lookahead event per cycle to prevent overwhelming the driver
       }
     }
 

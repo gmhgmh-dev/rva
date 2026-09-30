@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rva/models/lookahead_event.dart';
 import 'package:rva/models/road_point.dart';
 import 'package:rva/models/voice_alert_event.dart';
+import 'package:rva/services/path_traversal_helper.dart';
 import 'package:rva/services/voice_assistant_state_machine.dart';
 import 'package:rva/services/settings_service.dart';
 
@@ -1693,6 +1694,223 @@ void main() {
       );
 
       expect(events, isEmpty);
+    });
+  });
+
+  group('CSN Priority Hierarchy and Lookahead Mutual Exclusion Tests', () {
+    test('filterByHierarchy: Traffic light suppresses Give Way and Main Road Reminder within 25m', () {
+      final raw = [
+        LookaheadEvent(
+          type: LookaheadEventType.giveWay,
+          distanceMeters: 45.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+        LookaheadEvent(
+          type: LookaheadEventType.trafficLight,
+          distanceMeters: 40.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+        LookaheadEvent(
+          type: LookaheadEventType.mainRoadReminder,
+          distanceMeters: 42.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+      ];
+
+      final filtered = PathTraversalHelper.filterByHierarchy(raw);
+      expect(filtered.length, equals(1));
+      expect(filtered.first.type, equals(LookaheadEventType.trafficLight));
+      expect(filtered.first.distanceMeters, equals(40.0));
+    });
+
+    test('filterByHierarchy: STOP sign suppresses Give Way and Equal Intersection within 25m', () {
+      final raw = [
+        LookaheadEvent(
+          type: LookaheadEventType.equalIntersection,
+          distanceMeters: 38.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+        LookaheadEvent(
+          type: LookaheadEventType.giveWay,
+          distanceMeters: 35.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+        LookaheadEvent(
+          type: LookaheadEventType.stopSign,
+          distanceMeters: 36.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+      ];
+
+      final filtered = PathTraversalHelper.filterByHierarchy(raw);
+      expect(filtered.length, equals(1));
+      expect(filtered.first.type, equals(LookaheadEventType.stopSign));
+    });
+
+    test('filterByHierarchy: Preserves distinct clusters located >25m apart', () {
+      final raw = [
+        // Cluster 1 (Intersection A at 35-37m)
+        LookaheadEvent(
+          type: LookaheadEventType.giveWay,
+          distanceMeters: 37.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+        LookaheadEvent(
+          type: LookaheadEventType.trafficLight,
+          distanceMeters: 35.0,
+          latitude: 57.3950,
+          longitude: 21.5650,
+        ),
+        // Cluster 2 (Intersection B at 85m)
+        LookaheadEvent(
+          type: LookaheadEventType.giveWay,
+          distanceMeters: 85.0,
+          latitude: 57.3980,
+          longitude: 21.5680,
+        ),
+      ];
+
+      final filtered = PathTraversalHelper.filterByHierarchy(raw);
+      expect(filtered.length, equals(2));
+      expect(filtered[0].type, equals(LookaheadEventType.trafficLight));
+      expect(filtered[0].distanceMeters, equals(35.0));
+      expect(filtered[1].type, equals(LookaheadEventType.giveWay));
+      expect(filtered[1].distanceMeters, equals(85.0));
+    });
+
+    test('VoiceAssistantStateMachine: Traffic light + Give Way only announces traffic light', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+      );
+
+      final point = RoadPoint(
+        latitude: 57.3950,
+        longitude: 21.5650,
+        vehicleSpeedKmh: 45.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Lielais prospekts',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.giveWay,
+            distanceMeters: 45.0,
+            latitude: 57.3950,
+            longitude: 21.5650,
+          ),
+          LookaheadEvent(
+            type: LookaheadEventType.trafficLight,
+            distanceMeters: 40.0,
+            latitude: 57.3950,
+            longitude: 21.5650,
+          ),
+        ],
+      );
+
+      final events = sm.processRoadPoint(
+        point,
+        lookaheadTrafficLights: true,
+        lookaheadGiveWay: true,
+        lookaheadIntersections: true,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.trafficLightAhead));
+      expect(events.first.spokenText, equals('Priekšā luksofors.'));
+    });
+
+    test('VoiceAssistantStateMachine: Traffic light disabled leaves Give Way suppressed at traffic light intersection', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+      );
+
+      final point = RoadPoint(
+        latitude: 57.3950,
+        longitude: 21.5650,
+        vehicleSpeedKmh: 45.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Lielais prospekts',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.giveWay,
+            distanceMeters: 45.0,
+            latitude: 57.3950,
+            longitude: 21.5650,
+          ),
+          LookaheadEvent(
+            type: LookaheadEventType.trafficLight,
+            distanceMeters: 40.0,
+            latitude: 57.3950,
+            longitude: 21.5650,
+          ),
+        ],
+      );
+
+      // User has traffic lights disabled, but giveWay enabled
+      final events = sm.processRoadPoint(
+        point,
+        lookaheadTrafficLights: false,
+        lookaheadGiveWay: true,
+        lookaheadIntersections: true,
+      );
+
+      // Must be empty: Give Way at traffic light should NOT be spoken
+      expect(events, isEmpty);
+    });
+
+    test('VoiceAssistantStateMachine: STOP sign + Main Road Reminder only announces STOP sign', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Saules iela',
+      );
+
+      final point = RoadPoint(
+        latitude: 57.3960,
+        longitude: 21.5660,
+        vehicleSpeedKmh: 35.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Saules iela',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.mainRoadReminder,
+            distanceMeters: 42.0,
+            latitude: 57.3960,
+            longitude: 21.5660,
+          ),
+          LookaheadEvent(
+            type: LookaheadEventType.stopSign,
+            distanceMeters: 40.0,
+            latitude: 57.3960,
+            longitude: 21.5660,
+          ),
+        ],
+      );
+
+      final events = sm.processRoadPoint(
+        point,
+        lookaheadGiveWay: true,
+        lookaheadIntersections: true,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.giveWayAhead));
+      expect(events.first.spokenText, equals('Priekšā stop zīme.'));
     });
   });
 }
