@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../version.dart';
 import '../services/settings_service.dart';
 
 class AboutScreen extends StatelessWidget {
@@ -6,9 +7,9 @@ class AboutScreen extends StatelessWidget {
 
   static const String appName = 'Roads Voice Assistant';
   static const String appShortName = 'RVA';
-  static const String appVersion = SettingsService.appVersion;
-  static const String buildNumber = '3';
-  static const String releaseTag = 'v0.2.1-stable';
+  static const String appVersion = AppVersion.versionName;
+  static const String buildNumber = AppVersion.buildNumber;
+  static const String releaseTag = AppVersion.releaseTag;
   static const String repoUrl = 'https://github.com/gmhgmh-dev/rva';
 
   @override
@@ -78,9 +79,9 @@ class AboutScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
                   ),
-                  child: const Text(
-                    'Versija $appVersion (Būvējums $buildNumber) • $releaseTag',
-                    style: TextStyle(
+                  child: Text(
+                    AppVersion.displayVersion,
+                    style: const TextStyle(
                       color: Color(0xFF8AB4F8),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

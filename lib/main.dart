@@ -17,7 +17,11 @@ void main() async {
   );
 
   final assistantManager = DrivingAssistantManager();
-  await assistantManager.init(loadAsset: true);
+  try {
+    await assistantManager.init(loadAsset: true);
+  } catch (e, stack) {
+    debugPrint('Fatal initialization error caught in main: $e\n$stack');
+  }
 
   runApp(RoadsVoiceAssistantApp(assistantManager: assistantManager));
 }

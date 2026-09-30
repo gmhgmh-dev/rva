@@ -177,5 +177,42 @@ class TripRecorderService {
     _gpxFile = null;
     _logFile = null;
   }
+
+  /// Imports a GPX file from an external path or copied content into app documents.
+  Future<File?> importGpxFile(File sourceFile) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      String originalName = sourceFile.path.split(Platform.pathSeparator).last;
+      if (!originalName.toLowerCase().endsWith('.gpx')) {
+        originalName = '$originalName.gpx';
+      }
+      if (!originalName.startsWith('trip_')) {
+        originalName = 'trip_$originalName';
+      }
+      final targetPath = '${dir.path}/$originalName';
+      final importedFile = await sourceFile.copy(targetPath);
+      return importedFile;
+    } catch (e) {
+      debugPrint('Failed to import GPX file: $e');
+      return null;
+    }
+  }
+
+  /// Saves raw GPX XML string into app documents directory.
+  Future<File?> importGpxFromString(String gpxContent, {String? customName}) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+      final fileName = customName != null && customName.isNotEmpty
+          ? (customName.startsWith('trip_') ? customName : 'trip_$customName')
+          : 'trip_imported_$timestamp.gpx';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsString(gpxContent);
+      return file;
+    } catch (e) {
+      debugPrint('Failed to save imported GPX content: $e');
+      return null;
+    }
+  }
 }
 

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../version.dart';
+
 enum SpeedToleranceMode {
   fixed,
   percentage,
@@ -13,7 +15,7 @@ enum VoiceAlertStyle {
 }
 
 class SettingsService extends ChangeNotifier {
-  static const String appVersion = '0.2.1';
+  static const String appVersion = AppVersion.versionName;
 
   static const _keyUseDynamicPhrases = 'use_dynamic_phrases';
   static const _keyVoiceAlertStyle = 'voice_alert_style';

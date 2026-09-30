@@ -12,7 +12,7 @@ void main() {
 
     expect(find.text('Par lietotni'), findsOneWidget);
     expect(find.text('Roads Voice Assistant'), findsOneWidget);
-    expect(find.textContaining('Versija 0.2.1'), findsOneWidget);
+    expect(find.textContaining('Versija 0.2.2'), findsOneWidget);
     expect(find.text('Apraksts un mērķis'), findsOneWidget);
     expect(find.text('Galvenās funkcijas'), findsOneWidget);
     expect(find.text('Kartes un atvērtā koda datu avoti', skipOffstage: false), findsOneWidget);

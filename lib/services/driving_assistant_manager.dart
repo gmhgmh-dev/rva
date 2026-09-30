@@ -119,13 +119,37 @@ class DrivingAssistantManager extends ChangeNotifier {
   bool get isOfflineMapLoaded => pmTilesService.isLoaded;
 
   Future<void> init({bool loadAsset = true}) async {
-    await settingsService.loadSettings();
-    _onSettingsChanged(); // Apply initial settings like wakelock
-    await ttsService.init();
-    if (loadAsset) {
-      await mockLocationService.loadRoute();
+    try {
+      await ttsService.init();
+    } catch (e) {
+      debugPrint('Warning: Initial TTS init error (non-fatal): $e');
     }
-    await tryLoadOfflineMap();
+
+    try {
+      await settingsService.loadSettings();
+    } catch (e) {
+      debugPrint('Warning: Settings load error (non-fatal): $e');
+    }
+
+    try {
+      _onSettingsChanged(); // Apply initial settings to stateMachine and TTS
+    } catch (e) {
+      debugPrint('Warning: _onSettingsChanged error (non-fatal): $e');
+    }
+
+    if (loadAsset) {
+      try {
+        await mockLocationService.loadRoute();
+      } catch (e) {
+        debugPrint('Warning: mockLocationService loadRoute error: $e');
+      }
+    }
+
+    try {
+      await tryLoadOfflineMap();
+    } catch (e) {
+      debugPrint('Warning: tryLoadOfflineMap error: $e');
+    }
   }
 
   /// Attempts to open the local latvia.pmtiles file if downloaded.

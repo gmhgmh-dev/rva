@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-
-
+import 'package:share_plus/share_plus.dart';
 import 'package:geolocator/geolocator.dart';
 
 
@@ -2213,22 +2212,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Izvēlieties maršrutu simulācijai', 
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Izvēlieties maršrutu simulācijai',
+                        style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.file_upload_outlined, color: Colors.cyanAccent),
+                        tooltip: 'Importēt GPX failu',
+                        onPressed: () => _showImportGpxDialog(context, manager),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   ListTile(
                     leading: const Icon(Icons.map_rounded, color: Colors.cyanAccent),
                     title: const Text('Iebūvētais Ventspils testa maršruts', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('Noklusētais pilsētas ielu scenārijs', style: TextStyle(color: Colors.white54, fontSize: 12)),
                     onTap: () {
                       Navigator.pop(ctx);
                       manager.startVentspilsTestRoute(interval: const Duration(seconds: 1));
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.add_circle_outline_rounded, color: Colors.blueAccent),
+                    title: const Text('Importēt jaunu GPX maršrutu', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('Ielīmēt GPX datus vai pievienot no faila', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showImportGpxDialog(context, manager);
+                    },
+                  ),
                   if (gpxFiles.isNotEmpty) ...[
                     const Divider(color: Colors.white24),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8.0),
-                      child: Text('Jūsu saglabātie braucieni:', style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Jūsu saglabātie braucieni:', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.cyanAccent,
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            icon: const Icon(Icons.share_rounded, size: 16),
+                            label: const Text('Kopīgot visus', style: TextStyle(fontSize: 12)),
+                            onPressed: () {
+                              manager.tripRecorderService.shareRecordedFiles();
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                     Expanded(
                       child: ListView.builder(
@@ -2249,6 +2286,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             leading: const Icon(Icons.history_edu_rounded, color: Colors.cyanAccent),
                             title: Text(fileName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             subtitle: details.isNotEmpty ? Text(details, style: const TextStyle(color: Colors.white54, fontSize: 12)) : null,
+                            trailing: IconButton(
+                              icon: const Icon(Icons.share_outlined, color: Colors.white38, size: 20),
+                              tooltip: 'Kopīgot / Dublēt šo GPX',
+                              onPressed: () {
+                                Share.shareXFiles([XFile(file.path)], text: 'RVA GPX maršruts: $fileName');
+                              },
+                            ),
                             onTap: () async {
                               Navigator.pop(ctx);
                               final count = await manager.startSimulationFromFile(file, interval: const Duration(seconds: 1));
@@ -2273,6 +2317,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         );
       },
+    );
+  }
+
+  void _showImportGpxDialog(BuildContext context, DrivingAssistantManager manager) {
+    final controller = TextEditingController();
+    final nameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E222B),
+        title: const Text('Importēt GPX maršrutu', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Ielīmējiet GPX XML saturu vai sagatavoto maršruta tekstu:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Maršruta nosaukums (neobligāts)',
+                  hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                  filled: true,
+                  fillColor: const Color(0xFF14171F),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                maxLines: 8,
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'monospace'),
+                decoration: InputDecoration(
+                  hintText: '<?xml version="1.0" ...>\n<gpx ...>\n  <trk>...\n</gpx>',
+                  hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                  filled: true,
+                  fillColor: const Color(0xFF14171F),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Atcelt', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E66FF), foregroundColor: Colors.white),
+            onPressed: () async {
+              final content = controller.text.trim();
+              if (content.isEmpty) return;
+              final customName = nameController.text.trim();
+              final file = await manager.tripRecorderService.importGpxFromString(
+                content,
+                customName: customName.isNotEmpty ? customName : null,
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                if (file != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('GPX maršruts veiksmīgi saglabāts: ${file.path.split(Platform.pathSeparator).last}'),
+                      backgroundColor: Colors.green.shade800,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Neizdevās saglabāt GPX failu.'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Saglabāt maršrutu'),
+          ),
+        ],
+      ),
     );
   }
 }
