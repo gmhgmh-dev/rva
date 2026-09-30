@@ -77,7 +77,7 @@ class SettingsService extends ChangeNotifier {
   double _streetChangeDistanceMeters = 20.0; // Recommended default 20m for fast scooter & car turns
   int _streetChangeConfirmations = 3; // Recommended default: 3 points (~3s)
   bool _enableSpeedAdaptiveDistance = true; // Auto-scale distance & confirmations for micromobility (<= 25 km/h)
-  int _speedRestorationConfirmations = 4; // Recommended default: 4 points (~4s)
+  int _speedRestorationConfirmations = 1; // Recommended default: 1 point (instant CSN restoration)
   int _oneWayExitConfirmations = 3; // Recommended default: 3 points (~3s)
   bool _filterStaleGpsFixes = true; // Recommended default: true
   int _staleGpsTimeoutSeconds = 5; // Recommended default: 5s
@@ -168,7 +168,7 @@ class SettingsService extends ChangeNotifier {
     _streetChangeDistanceMeters = (prefs.getDouble(_keyStreetChangeDistanceMeters) ?? 20.0).clamp(10.0, 100.0);
     _streetChangeConfirmations = (prefs.getInt(_keyStreetChangeConfirmations) ?? 3).clamp(1, 10);
     _enableSpeedAdaptiveDistance = prefs.getBool(_keyEnableSpeedAdaptiveDistance) ?? true;
-    _speedRestorationConfirmations = (prefs.getInt(_keySpeedRestorationConfirmations) ?? 4).clamp(1, 10);
+    _speedRestorationConfirmations = (prefs.getInt(_keySpeedRestorationConfirmations) ?? 1).clamp(1, 10);
     _oneWayExitConfirmations = (prefs.getInt(_keyOneWayExitConfirmations) ?? 3).clamp(1, 10);
     _filterStaleGpsFixes = prefs.getBool(_keyFilterStaleGpsFixes) ?? true;
     _staleGpsTimeoutSeconds = (prefs.getInt(_keyStaleGpsTimeoutSeconds) ?? 5).clamp(1, 30);

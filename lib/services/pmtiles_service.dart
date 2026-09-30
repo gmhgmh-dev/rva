@@ -231,8 +231,8 @@ class PMTilesService {
           }
 
           final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value.toString().trim().toLowerCase();
-          final fRef = props['ref']?.value?.toString().trim().toLowerCase();
-          final fClass = (props['class'] ?? props['highway'])?.value?.toString().trim().toLowerCase() ?? '';
+          final fRef = props['ref']?.value.toString().trim().toLowerCase();
+          final fClass = (props['class'] ?? props['highway'])?.value.toString().trim().toLowerCase() ?? '';
 
           // Match current road or known corridor aliases (e.g. A10, Dzintaru iela, Ventas tilts)
           bool isCurrentRoad = false;

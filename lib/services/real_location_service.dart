@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import '../data/ventspils_traffic_nodes.dart';
 import '../models/lookahead_event.dart';
 import '../models/road_attributes.dart';
 import '../models/road_point.dart';
@@ -202,8 +203,10 @@ class RealLocationService {
 
           RoadAttributes? lookaheadAttrs;
           double? lookaheadDist;
+          ({double lat, double lon})? projectedCoord;
           if (heading != null && speedKmh >= 8.0) {
             lookaheadDist = customLookaheadDistance ?? PMTilesService.calculateDynamicLookaheadDistance(speedKmh);
+            projectedCoord = PMTilesService.calculateLookaheadCoordinate(lat, lon, heading, lookaheadDist);
             try {
               lookaheadAttrs = await pmTilesService!.getLookaheadRoadAttributes(
                 lat,
@@ -217,9 +220,11 @@ class RealLocationService {
 
           int? lookaheadMaxSpeed;
           if (lookaheadAttrs != null) {
+            final targetLat = projectedCoord?.lat ?? lat;
+            final targetLon = projectedCoord?.lon ?? lon;
             final lookaheadResolvedSpeed = resolveSpeedLimit(
-              lat: lat,
-              lon: lon,
+              lat: targetLat,
+              lon: targetLon,
               explicitMaxspeed: lookaheadAttrs.maxspeed,
               streetName: lookaheadAttrs.name,
               roadClass: lookaheadAttrs.roadClass,
@@ -239,6 +244,16 @@ class RealLocationService {
                  currentRoadName: currentRoadName,
                );
              } catch (_) {}
+
+             final offlineTrafficNodes = VentspilsTrafficNodes.findUpcomingNodes(
+               lat: lat,
+               lon: lon,
+               heading: heading,
+               lookaheadDist: lookaheadDist ?? 70.0,
+             );
+             if (offlineTrafficNodes.isNotEmpty) {
+               lookaheadEvents.addAll(offlineTrafficNodes);
+             }
           }
 
           _updateCache(lat, lon, enrichedAttrs);

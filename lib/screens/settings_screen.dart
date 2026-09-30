@@ -612,11 +612,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildCountTile(
               context: context,
               title: 'Ātruma atcelšanas apstiprinājumi',
-              subtitle: 'Ieteicamais: 4 punkti. Novērš 50 km/h mirgošanu uz vienas ielas posmiem.',
+              subtitle: 'Ieteicamais: 1 punkts (zibenīga atcelšana pēc CSN). Novērš aizturi pēc krustojumiem.',
               value: settings.speedRestorationConfirmations,
               min: 1,
               max: 10,
-              defaultValue: 4,
+              defaultValue: 1,
               unit: 'punkti',
               onChanged: (val) => settings.setSpeedRestorationConfirmations(val),
             ),

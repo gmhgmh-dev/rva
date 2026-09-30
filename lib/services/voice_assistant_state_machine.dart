@@ -43,6 +43,7 @@ class VoiceAssistantStateMachine {
   DateTime? _lastSpeedCameraAlertTime;
   String? _lastAlertedStreetName;
   double? _currentStreetHeading;
+  DateTime? _lastStreetChangeAlertTime;
   
   // Lookahead event tracking to prevent spam
   final Map<LookaheadEventType, DateTime> _lastLookaheadEventTimes = {};
@@ -117,6 +118,7 @@ class VoiceAssistantStateMachine {
     _lastSpeedCameraAlertTime = null;
     _lastAlertedStreetName = null;
     _currentStreetHeading = null;
+    _lastStreetChangeAlertTime = null;
     _lastLookaheadEventTimes.clear();
     _lastLookaheadEventLat = null;
     _lastLookaheadEventLon = null;
@@ -699,7 +701,8 @@ class VoiceAssistantStateMachine {
           final isSame = (previousStreetName == null) || (streetName == null) || areSameStreets(previousStreetName, streetName);
           if (isSame || !useDynamicPhrases || !announceStreetChanges) {
             _pendingSpeedRestorationConfirmations++;
-            if (_pendingSpeedRestorationConfirmations >= speedRestorationConfirmations) {
+            final requiredConfirmations = (!_isIn30SpeedZone) ? 1 : speedRestorationConfirmations;
+            if (_pendingSpeedRestorationConfirmations >= requiredConfirmations) {
               final wasInActualZone = _isIn30SpeedZone;
               _isInReducedSpeedZone = false;
               _isIn30SpeedZone = false;
@@ -756,7 +759,7 @@ class VoiceAssistantStateMachine {
       }
     }
 
-    final bool isMoving = (vehicleSpeedKmh == null || vehicleSpeedKmh >= 3.5);
+    final bool isMoving = (vehicleSpeedKmh == null || vehicleSpeedKmh >= 5.0);
 
     // 3. VIENVIRZIENA IELAS STĀVOKLIS
     // Standstill protection: do not toggle one-way state when stopped at a red light or intersection (< 3.5 km/h)
@@ -962,14 +965,37 @@ class VoiceAssistantStateMachine {
             effectiveMinConfirmations = streetChangeConfirmations;
           }
 
+          // Anti-flutter / dense intersection debouncing:
+          // If a street change was announced recently (< 10 seconds ago),
+          // avoid oscillating between adjacent streets in a junction unless
+          // the vehicle made an actual turn (heading diff >= 35 deg) or travels
+          // a substantial distance (>= 25m) on the new street.
+          double finalMinDistance = effectiveMinDistance;
+          int finalMinConfirmations = effectiveMinConfirmations;
+          if (_lastStreetChangeAlertTime != null &&
+              now.difference(_lastStreetChangeAlertTime!).inSeconds < 10) {
+            bool hasTurned = false;
+            if (heading != null && _currentStreetHeading != null) {
+              double diff = (heading - _currentStreetHeading!).abs() % 180.0;
+              if (diff > 90.0) diff = 180.0 - diff;
+              if (diff >= 35.0) {
+                hasTurned = true;
+              }
+            }
+            if (!hasTurned) {
+              finalMinDistance = streetChangeDistanceMeters.clamp(25.0, 100.0);
+              finalMinConfirmations = streetChangeConfirmations.clamp(3, 10);
+            }
+          }
+
           // Jaunā iela tiek apstiprināta tikai tad, ja:
-          // 1) Ar GPS koordinātām un ieslēgtu distanci: nobraukta distance >= effectiveMinDistance
-          //    UN saņemti vismaz effectiveMinConfirmations atsevišķi punkti.
-          // 2) Bez koordinātām vai ar distanci <= 0: effectiveMinConfirmations.
-          final bool hasCoordsAndDistance = (latitude != null && longitude != null && effectiveMinDistance > 0);
+          // 1) Ar GPS koordinātām un ieslēgtu distanci: nobraukta distance >= finalMinDistance
+          //    UN saņemti vismaz finalMinConfirmations atsevišķi punkti.
+          // 2) Bez koordinātām vai ar distanci <= 0: finalMinConfirmations.
+          final bool hasCoordsAndDistance = (latitude != null && longitude != null && finalMinDistance > 0);
           final bool isDistanceMet = hasCoordsAndDistance
-              ? (_pendingStreetDistanceMeters >= effectiveMinDistance && _pendingStreetConfirmations >= effectiveMinConfirmations)
-              : (_pendingStreetConfirmations >= effectiveMinConfirmations);
+              ? (_pendingStreetDistanceMeters >= finalMinDistance && _pendingStreetConfirmations >= finalMinConfirmations)
+              : (_pendingStreetConfirmations >= finalMinConfirmations);
 
           if (isDistanceMet) {
             // Apstiprināts, ka lietotājs tiešām ir nogriezies uz jauno ielu un nobraucis nepieciešamo distanci!
@@ -1065,6 +1091,7 @@ class VoiceAssistantStateMachine {
                     eventType = VoiceAlertType.streetChanged;
                   }
 
+                  _lastStreetChangeAlertTime = now;
                   events.add(
                     VoiceAlertEvent(
                       type: eventType,
@@ -1078,6 +1105,7 @@ class VoiceAssistantStateMachine {
                 }
               } else {
                 _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
+                _lastStreetChangeAlertTime = now;
               }
             }
           }

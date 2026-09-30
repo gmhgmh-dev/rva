@@ -83,4 +83,5 @@ android/app/upload-keystore.jks
 
 # Private internal docs
 docs/
+scratch/
 

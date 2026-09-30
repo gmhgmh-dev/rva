@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rva/data/ventspils_traffic_nodes.dart';
 import 'package:rva/models/lookahead_event.dart';
 import 'package:rva/models/road_point.dart';
 import 'package:rva/models/voice_alert_event.dart';
@@ -2182,6 +2183,167 @@ void main() {
       expect(VoiceAssistantStateMachine.areSameStreets('Dzintaru iela', 'Ventas tilts'), isTrue);
       expect(VoiceAssistantStateMachine.areSameStreets('Ventas tilts', 'A10'), isTrue);
       expect(VoiceAssistantStateMachine.areSameStreets('A10', 'Dzintaru iela'), isTrue);
+    });
+  });
+
+  group('Trip 6 Telemetry Fixes Tests', () {
+    test('VentspilsTrafficNodes.findUpcomingNodes detects traffic signal ahead and ignores opposite direction', () {
+      // Node 32633368 is at lat: 57.393767, lon: 21.564715 (Marijas iela / Lielais prospekts)
+      // Car is ~45m south at 57.39336, 21.56471, heading 0 deg (North, towards the signal)
+      final nodesAhead = VentspilsTrafficNodes.findUpcomingNodes(
+        lat: 57.39336,
+        lon: 21.56471,
+        heading: 0.0,
+        lookaheadDist: 70.0,
+      );
+      expect(nodesAhead.any((e) => e.type == LookaheadEventType.trafficLight), isTrue);
+
+      // Car is driving south (heading 180 deg, away from the signal)
+      final nodesAway = VentspilsTrafficNodes.findUpcomingNodes(
+        lat: 57.39336,
+        lon: 21.56471,
+        heading: 180.0,
+        lookaheadDist: 70.0,
+      );
+      expect(nodesAway.any((e) => e.type == LookaheadEventType.trafficLight), isFalse);
+    });
+
+    test('Immediate 1-point restoration for non-zone CSN speed limit even if settings have 4 confirmations', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Sarkanmuižas dambis',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // Vehicle encounters ordinary 30 km/h sign (isZone: false) on Sarkanmuižas dambis
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39600,
+          longitude: 21.57200,
+          vehicleSpeedKmh: 35.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Sarkanmuižas dambis',
+          timestamp: DateTime(2026, 9, 30, 21, 25, 0),
+        ),
+      );
+      expect(sm.isInReducedSpeedZone, isTrue);
+
+      // At intersection, speed limit returns to 50 km/h.
+      // Even with speedRestorationConfirmations: 4, non-zone CSN limit must restore on point 1!
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39630,
+          longitude: 21.57200,
+          vehicleSpeedKmh: 35.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Sarkanmuižas dambis',
+          timestamp: DateTime(2026, 9, 30, 21, 25, 1),
+        ),
+        speedRestorationConfirmations: 4,
+      );
+
+      expect(events.where((e) => e.type == VoiceAlertType.speedRestored).length, equals(1),
+          reason: 'Non-zone speed limit must restore immediately on point 1 according to CSN');
+      expect(sm.isInReducedSpeedZone, isFalse);
+    });
+
+    test('Old Town anti-flutter prevents oscillation between streets within 10s', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Sinagogas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // Point 1 & 2: turn onto Platā iela
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39620,
+          longitude: 21.56200,
+          vehicleSpeedKmh: 12.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Platā iela',
+          heading: 90.0,
+          timestamp: DateTime(2026, 9, 30, 21, 24, 0),
+        ),
+        streetChangeDistanceMeters: 10.0,
+        streetChangeConfirmations: 2,
+        enableSpeedAdaptiveDistance: true,
+      );
+
+      final eventsPlata = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39620,
+          longitude: 21.56220,
+          vehicleSpeedKmh: 12.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Platā iela',
+          heading: 90.0,
+          timestamp: DateTime(2026, 9, 30, 21, 24, 1),
+        ),
+        streetChangeDistanceMeters: 10.0,
+        streetChangeConfirmations: 2,
+        enableSpeedAdaptiveDistance: true,
+      );
+      expect(eventsPlata.any((e) => e.type == VoiceAlertType.streetChanged), isTrue);
+      expect(sm.currentStreetName, equals('Platā iela'));
+
+      // 2 seconds later: GPS jitters to Saules iela with straight heading (no 35 deg turn)
+      final flutter1 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39625,
+          longitude: 21.56230,
+          vehicleSpeedKmh: 10.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          heading: 92.0, // Same straight direction (< 35 deg difference)
+          timestamp: DateTime(2026, 9, 30, 21, 24, 3),
+        ),
+        streetChangeDistanceMeters: 10.0,
+        streetChangeConfirmations: 2,
+        enableSpeedAdaptiveDistance: true,
+      );
+      expect(flutter1, isEmpty, reason: 'Anti-flutter cooldown must suppress rapid adjacent street flutter');
+      expect(sm.currentStreetName, equals('Platā iela'));
+    });
+
+    test('Standstill protection at < 5.0 km/h prevents street candidate accumulation', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // Car is stopped/creeping at 3.5 km/h at an intersection
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 3.5,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime(2026, 9, 30, 21, 20, 0),
+        ),
+      );
+      expect(events, isEmpty);
+      expect(sm.pendingStreetDistanceMeters, equals(0.0));
+      expect(sm.currentStreetName, equals('Kuldīgas iela'));
     });
   });
 }

@@ -4,7 +4,7 @@
 /// flutter build apk --dart-define=GIT_HASH=abc1234 --dart-define=BUILD_NUMBER=4
 class AppVersion {
   static const String versionName = '0.2.2';
-  static const String defaultBuildNumber = '4';
+  static const String defaultBuildNumber = '6';
   static const String releaseChannel = 'stable';
 
   /// Compile-time passed build number or fallback to default.

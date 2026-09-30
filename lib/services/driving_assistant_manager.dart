@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../data/ventspils_traffic_nodes.dart';
 import '../models/road_point.dart';
 import '../models/voice_alert_event.dart';
 import 'map_downloader_service.dart';
@@ -320,18 +321,53 @@ class DrivingAssistantManager extends ChangeNotifier {
           );
         }
 
-        if (point.heading != null && point.vehicleSpeedKmh >= 15.0) {
+        if (point.heading != null && point.vehicleSpeedKmh >= 8.0) {
+          final lookaheadDist = settingsService.lookaheadDistanceMeters;
+          final projectedCoord = PMTilesService.calculateLookaheadCoordinate(
+            point.latitude,
+            point.longitude,
+            point.heading!,
+            lookaheadDist,
+          );
+          final lookaheadAttrs = await pmTilesService.getLookaheadRoadAttributes(
+            point.latitude,
+            point.longitude,
+            heading: point.heading!,
+            speedKmh: point.vehicleSpeedKmh,
+            customLookaheadDistance: lookaheadDist,
+          );
+          int? lookaheadMaxSpeed;
+          if (lookaheadAttrs != null) {
+            lookaheadMaxSpeed = RealLocationService.resolveSpeedLimit(
+              lat: projectedCoord.lat,
+              lon: projectedCoord.lon,
+              explicitMaxspeed: lookaheadAttrs.maxspeed,
+              streetName: lookaheadAttrs.name,
+              roadClass: lookaheadAttrs.roadClass,
+            );
+          }
+
           final lookaheadEvents = await pmTilesService.getLookaheadEvents(
             point.latitude,
             point.longitude,
             heading: point.heading!,
             speedKmh: point.vehicleSpeedKmh,
-            customLookaheadDistance: settingsService.lookaheadDistanceMeters,
+            customLookaheadDistance: lookaheadDist,
             currentRoadName: stateMachine.currentStreetName,
           );
-          if (lookaheadEvents.isNotEmpty) {
-             effectivePoint = effectivePoint.copyWith(lookaheadEvents: lookaheadEvents);
-          }
+          final offlineNodes = VentspilsTrafficNodes.findUpcomingNodes(
+            lat: point.latitude,
+            lon: point.longitude,
+            heading: point.heading!,
+            lookaheadDist: lookaheadDist,
+          );
+          final allEvents = [...lookaheadEvents, ...offlineNodes];
+
+          effectivePoint = effectivePoint.copyWith(
+            lookaheadMaxSpeed: lookaheadMaxSpeed,
+            lookaheadDistanceMeters: lookaheadDist,
+            lookaheadEvents: allEvents,
+          );
         }
       } catch (e) {
         debugPrint('PMTiles lookup error during simulation: $e');
