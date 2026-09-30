@@ -23,12 +23,14 @@ void main() {
       expect(map['voice_alert_style'], 'concise');
       expect(map['tts_speech_rate'], 0.5);
       expect(map['tts_pitch'], 1.0);
+      expect(map['record_virtual_alert_logs'], true);
       expect(map['app_version'], SettingsService.appVersion);
 
       final jsonStr = settings.exportJsonString();
       expect(jsonStr.contains('"road_search_radius_meters": 40.0'), true);
       expect(jsonStr.contains('"audio_ducking": true'), true);
       expect(jsonStr.contains('"voice_alert_style": "concise"'), true);
+      expect(jsonStr.contains('"record_virtual_alert_logs": true'), true);
       expect(jsonStr.contains('"tts_speech_rate": 0.5'), true);
     });
 
@@ -45,6 +47,7 @@ void main() {
         "audio_ducking": false,
         "lookahead_distance_meters": 85.0,
         "voice_alert_style": "detailed",
+        "record_virtual_alert_logs": false,
         "tts_engine": "lv.tilde.balss",
         "tts_voice_name": "lv-lv-x-jva-local",
         "tts_voice_locale": "lv-LV",
@@ -58,6 +61,7 @@ void main() {
       expect(settings.roadSearchRadiusMeters, 55.0);
       expect(settings.courtyardSearchRadiusMeters, 20.0);
       expect(settings.streetChangeConfirmations, 6);
+      expect(settings.recordVirtualAlertLogs, false);
       expect(settings.prioritizePedestrianAndCycleways, true);
       expect(settings.audioDucking, false);
       expect(settings.lookaheadDistanceMeters, 85.0);

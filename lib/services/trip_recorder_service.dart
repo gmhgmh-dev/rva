@@ -7,18 +7,35 @@ import '../models/voice_alert_event.dart';
 import 'settings_service.dart';
 
 class TripRecorderService {
+  final Directory? customStorageDir;
   File? _gpxFile;
   File? _logFile;
+  File? _lastCompletedLogFile;
   bool _isRecording = false;
   String _sessionIdentifier = '';
 
-  Future<void> startRecording({bool recordGpx = true, bool recordLog = true}) async {
+  TripRecorderService({this.customStorageDir});
+
+  File? get lastCompletedLogFile => _lastCompletedLogFile;
+
+  Future<Directory> _getStorageDirectory() async =>
+      customStorageDir ?? await getApplicationDocumentsDirectory();
+
+  Future<void> startRecording({
+    bool recordGpx = true,
+    bool recordLog = true,
+    String? sessionTag,
+    String? sourceDescription,
+  }) async {
     if (_isRecording) return;
     if (!recordGpx && !recordLog) return;
     
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      _sessionIdentifier = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+      final dir = await _getStorageDirectory();
+      final nowStr = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+      _sessionIdentifier = (sessionTag != null && sessionTag.isNotEmpty)
+          ? '${sessionTag}_$nowStr'
+          : nowStr;
       
       if (recordGpx) {
         _gpxFile = File('${dir.path}/trip_$_sessionIdentifier.gpx');
@@ -33,7 +50,10 @@ class TripRecorderService {
 
       if (recordLog) {
         _logFile = File('${dir.path}/alerts_$_sessionIdentifier.log');
-        await _logFile!.writeAsString('Brauciena brīdinājumi - $_sessionIdentifier\n\n');
+        final headerInfo = sourceDescription != null && sourceDescription.isNotEmpty
+            ? ' ($sourceDescription)'
+            : '';
+        await _logFile!.writeAsString('Brauciena brīdinājumi$headerInfo - $_sessionIdentifier\n\n');
       }
 
       _isRecording = true;
@@ -62,11 +82,12 @@ class TripRecorderService {
 
   Future<void> _logWriteQueue = Future.value();
 
-  Future<void> recordAlert(VoiceAlertEvent event) async {
+  Future<void> recordAlert(VoiceAlertEvent event, {DateTime? customTime}) async {
     if (!_isRecording || _logFile == null) return;
     _logWriteQueue = _logWriteQueue.then((_) async {
       try {
-        final timeStr = DateTime.now().toLocal().toString().split('.').first;
+        final timeToUse = customTime ?? event.timestamp;
+        final timeStr = timeToUse.toLocal().toString().split('.').first;
         final logEntry = '[$timeStr] ${event.type.name.toUpperCase()} -> ${event.spokenText} (Iela: ${event.streetName})\n';
         await _logFile!.writeAsString(logEntry, mode: FileMode.append);
       } catch (e) {
@@ -76,8 +97,8 @@ class TripRecorderService {
     await _logWriteQueue;
   }
 
-  Future<void> stopRecording() async {
-    if (!_isRecording) return;
+  Future<File?> stopRecording() async {
+    if (!_isRecording) return _lastCompletedLogFile;
     try {
       if (_gpxFile != null) {
         await _gpxFile!.writeAsString(
@@ -88,6 +109,10 @@ class TripRecorderService {
           mode: FileMode.append,
         );
       }
+      if (_logFile != null) {
+        await _logWriteQueue;
+        _lastCompletedLogFile = _logFile;
+      }
     } catch (e) {
       debugPrint('Failed to finalize GPX: $e');
     } finally {
@@ -95,11 +120,12 @@ class TripRecorderService {
       _gpxFile = null;
       _logFile = null;
     }
+    return _lastCompletedLogFile;
   }
 
   bool get isRecording => _isRecording;
   Future<List<File>> getRecordedFiles() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await _getStorageDirectory();
     final files = dir.listSync().whereType<File>().where((f) {
       final name = f.path.split(Platform.pathSeparator).last;
       return name.startsWith('trip_') || name.startsWith('alerts_');
@@ -117,7 +143,7 @@ class TripRecorderService {
 
   /// Exports current settings and the latest GPX/Log trip files as a single bundle for analysis
   Future<void> exportDiagnosticBundle(SettingsService settingsService) async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await _getStorageDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
     final settingsFile = File('${dir.path}/settings_$timestamp.json');
     await settingsFile.writeAsString(settingsService.exportJsonString());
@@ -154,7 +180,7 @@ class TripRecorderService {
 
   /// Exports current settings JSON only and opens share sheet
   Future<void> exportSettingsFile(SettingsService settingsService) async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await _getStorageDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
     final settingsFile = File('${dir.path}/rva_settings_$timestamp.json');
     await settingsFile.writeAsString(settingsService.exportJsonString());
@@ -181,7 +207,7 @@ class TripRecorderService {
   /// Imports a GPX file from an external path or copied content into app documents.
   Future<File?> importGpxFile(File sourceFile) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await _getStorageDirectory();
       String originalName = sourceFile.path.split(Platform.pathSeparator).last;
       if (!originalName.toLowerCase().endsWith('.gpx')) {
         originalName = '$originalName.gpx';
@@ -201,7 +227,7 @@ class TripRecorderService {
   /// Saves raw GPX XML string into app documents directory.
   Future<File?> importGpxFromString(String gpxContent, {String? customName}) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await _getStorageDirectory();
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
       final fileName = customName != null && customName.isNotEmpty
           ? (customName.startsWith('trip_') ? customName : 'trip_$customName')

@@ -750,6 +750,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: settings.recordAlertLogs,
               onChanged: (val) => settings.setRecordAlertLogs(val),
             ),
+            if (settings.recordAlertLogs) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 16.0),
+                child: _buildSwitch(
+                  title: 'Ierakstīt žurnālu arī testa braucieniem (GPX)',
+                  subtitle: 'Automātiski izveido .log failu, atskaņojot virtuālos GPX failus vai iebūvēto testa maršrutu.',
+                  value: settings.recordVirtualAlertLogs,
+                  onChanged: (val) => settings.setRecordVirtualAlertLogs(val),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             // Big Diagnostic Bundle Button
             Container(

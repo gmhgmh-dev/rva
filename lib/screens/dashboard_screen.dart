@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:share_plus/share_plus.dart';
 import 'package:geolocator/geolocator.dart';
@@ -60,53 +61,47 @@ class DashboardScreen extends StatefulWidget {
 
 
 class _DashboardScreenState extends State<DashboardScreen> {
-
+  StreamSubscription<File?>? _simFinishedSub;
 
   @override
-
-
   void initState() {
-
-
     super.initState();
-
-
     widget.assistantManager.addListener(_onStateChanged);
 
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-
-
-      if (widget.assistantManager.settingsService.autoStartGps && widget.assistantManager.mode == DriveMode.idle) {
-
-
-        widget.assistantManager.startRealGps();
-
-
+    _simFinishedSub = widget.assistantManager.simulationFinishedStream.listen((logFile) {
+      if (mounted) {
+        final logName = logFile != null ? logFile.path.split(Platform.pathSeparator).last : null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(logName != null
+                ? 'Testa brauciens pabeigts. Žurnāls saglabāts: $logName'
+                : 'Testa brauciens pabeigts.'),
+            backgroundColor: Colors.teal.shade800,
+            duration: const Duration(seconds: 6),
+            action: logFile != null
+                ? SnackBarAction(
+                    label: 'Kopīgot',
+                    textColor: Colors.cyanAccent,
+                    onPressed: () => Share.shareXFiles([XFile(logFile.path)], text: 'RVA testa brauciena žurnāls: $logName'),
+                  )
+                : null,
+          ),
+        );
       }
-
-
     });
 
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.assistantManager.settingsService.autoStartGps && widget.assistantManager.mode == DriveMode.idle) {
+        widget.assistantManager.startRealGps();
+      }
+    });
   }
 
-
-
-
-
   @override
-
-
   void dispose() {
-
-
     widget.assistantManager.removeListener(_onStateChanged);
-
-
+    _simFinishedSub?.cancel();
     super.dispose();
-
-
   }
 
 
@@ -1618,12 +1613,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
                   icon: const Icon(Icons.stop_rounded, size: 18),
-
-
                   label: const Text('Apturēt braucienu', style: TextStyle(fontWeight: FontWeight.bold)),
-
-
-                  onPressed: () => manager.stop(),
+                  onPressed: () async {
+                    final logFile = await manager.stop();
+                    if (context.mounted && logFile != null) {
+                      final logName = logFile.path.split(Platform.pathSeparator).last;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Brauciens apturēts. Žurnāls saglabāts: $logName'),
+                          backgroundColor: Colors.blueGrey.shade800,
+                          duration: const Duration(seconds: 5),
+                          action: SnackBarAction(
+                            label: 'Kopīgot',
+                            textColor: Colors.cyanAccent,
+                            onPressed: () => Share.shareXFiles([XFile(logFile.path)], text: 'RVA žurnāls: $logName'),
+                          ),
+                        ),
+                      );
+                    }
+                  },
 
 
                 ),
@@ -2264,6 +2272,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onTap: () {
                       Navigator.pop(ctx);
                       manager.startVentspilsTestRoute(interval: const Duration(seconds: 1));
+                      final isLogging = manager.settingsService.recordAlertLogs && manager.settingsService.recordVirtualAlertLogs;
+                      if (context.mounted && isLogging) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Palaists Ventspils testa maršruts • Žurnāls tiek ierakstīts'),
+                            backgroundColor: Colors.teal,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
                     },
                   ),
                   ListTile(
@@ -2325,11 +2343,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             onTap: () async {
                               Navigator.pop(ctx);
+                              final isLogging = manager.settingsService.recordAlertLogs && manager.settingsService.recordVirtualAlertLogs;
                               final count = await manager.startSimulationFromFile(file, interval: const Duration(seconds: 1));
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Palaista GPX simulācija: $fileName ($count punkti)'),
+                                    content: Text('Palaista GPX simulācija: $fileName ($count punkti)${isLogging ? ' • Žurnāls tiek ierakstīts' : ''}'),
                                     backgroundColor: Colors.teal.shade800,
                                     duration: const Duration(seconds: 4),
                                   ),

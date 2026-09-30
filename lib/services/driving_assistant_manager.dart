@@ -41,7 +41,11 @@ class DrivingAssistantManager extends ChangeNotifier {
   RoadPoint? _currentPoint;
   final List<VoiceAlertEvent> _alertHistory = [];
   StreamSubscription<RoadPoint>? _locationSubscription;
+  StreamSubscription<void>? _simulationCompleteSub;
+  final StreamController<File?> _simulationFinishedController = StreamController<File?>.broadcast();
   bool _isMuted = false;
+
+  Stream<File?> get simulationFinishedStream => _simulationFinishedController.stream;
 
   DrivingAssistantManager({
     SettingsService? settingsService,
@@ -67,6 +71,16 @@ class DrivingAssistantManager extends ChangeNotifier {
         );
         
     this.settingsService.addListener(_onSettingsChanged);
+
+    _simulationCompleteSub = this.mockLocationService.simulationCompleteStream.listen((_) async {
+      if (_mode == DriveMode.mockSimulation) {
+        final logFile = await this.tripRecorderService.stopRecording();
+        _mode = DriveMode.idle;
+        _updateWakelock();
+        _simulationFinishedController.add(logFile);
+        notifyListeners();
+      }
+    });
   }
 
   void _onSettingsChanged() {
@@ -97,11 +111,13 @@ class DrivingAssistantManager extends ChangeNotifier {
   }
 
   void _updateWakelock() {
-    if (settingsService.keepScreenOn && _mode != DriveMode.idle) {
-      WakelockPlus.enable();
-    } else {
-      WakelockPlus.disable();
-    }
+    try {
+      if (settingsService.keepScreenOn && _mode != DriveMode.idle) {
+        WakelockPlus.enable().catchError((_) {});
+      } else {
+        WakelockPlus.disable().catchError((_) {});
+      }
+    } catch (_) {}
   }
 
 
@@ -193,6 +209,16 @@ class DrivingAssistantManager extends ChangeNotifier {
     _alertHistory.clear();
     _mode = DriveMode.mockSimulation;
     _updateWakelock();
+
+    if (settingsService.recordAlertLogs && settingsService.recordVirtualAlertLogs) {
+      await tripRecorderService.startRecording(
+        recordGpx: false,
+        recordLog: true,
+        sessionTag: 'sim_ventspils',
+        sourceDescription: 'Simulācija: Ventspils testa maršruts',
+      );
+    }
+
     notifyListeners();
 
     _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
@@ -207,9 +233,21 @@ class DrivingAssistantManager extends ChangeNotifier {
     _alertHistory.clear();
     _mode = DriveMode.mockSimulation;
     _updateWakelock();
-    notifyListeners();
 
     final count = await mockLocationService.loadRouteFromFile(file);
+
+    if (settingsService.recordAlertLogs && settingsService.recordVirtualAlertLogs) {
+      final fileName = file.path.split(Platform.pathSeparator).last;
+      final cleanBase = fileName.replaceAll('.gpx', '').replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      await tripRecorderService.startRecording(
+        recordGpx: false,
+        recordLog: true,
+        sessionTag: 'sim_$cleanBase',
+        sourceDescription: 'GPX simulācija: $fileName',
+      );
+    }
+
+    notifyListeners();
 
     _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
     await mockLocationService.startSimulation(interval: interval);
@@ -224,6 +262,14 @@ class DrivingAssistantManager extends ChangeNotifier {
       _mode = DriveMode.mockSimulation;
       _locationSubscription?.cancel();
       _locationSubscription = mockLocationService.locationStream.listen(_onNewRoadPoint);
+      if (settingsService.recordAlertLogs && settingsService.recordVirtualAlertLogs) {
+        tripRecorderService.startRecording(
+          recordGpx: false,
+          recordLog: true,
+          sessionTag: 'sim_manual',
+          sourceDescription: 'Manuāla pārbaude pa soļiem',
+        );
+      }
       notifyListeners();
     }
     mockLocationService.nextStep();
@@ -267,18 +313,19 @@ class DrivingAssistantManager extends ChangeNotifier {
   }
 
   /// Stops any active driving mode and speech.
-  Future<void> stop() async {
+  Future<File?> stop() async {
     _locationSubscription?.cancel();
     _locationSubscription = null;
     mockLocationService.stopSimulation();
     await realLocationService.stopTracking();
-    await tripRecorderService.stopRecording();
+    final logFile = await tripRecorderService.stopRecording();
     await ttsService.stop();
     _currentPoint = null;
     _firstRealPointAnnounced = false;
     _mode = DriveMode.idle;
     _updateWakelock();
     notifyListeners();
+    return logFile;
   }
 
   /// Central point handler: feeds state machine, triggers voice, and logs event.
@@ -414,7 +461,7 @@ class DrivingAssistantManager extends ChangeNotifier {
 
     for (final event in events) {
       _alertHistory.insert(0, event);
-      if (_mode == DriveMode.realGps) {
+      if (_mode == DriveMode.realGps || _mode == DriveMode.mockSimulation) {
         tripRecorderService.recordAlert(event);
       }
       if (!_isMuted) {
@@ -432,7 +479,16 @@ class DrivingAssistantManager extends ChangeNotifier {
   @override
   void dispose() {
     settingsService.removeListener(_onSettingsChanged);
-    stop();
+    _simulationCompleteSub?.cancel();
+    _simulationFinishedController.close();
+    _locationSubscription?.cancel();
+    _locationSubscription = null;
+    mockLocationService.stopSimulation();
+    realLocationService.stopTracking();
+    tripRecorderService.stopRecording();
+    ttsService.stop();
+    _mode = DriveMode.idle;
+    _updateWakelock();
     mockLocationService.dispose();
     realLocationService.dispose();
     ttsService.dispose();

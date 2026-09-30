@@ -30,6 +30,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyKeepScreenOn = 'keep_screen_on';
   static const _keyRecordGpx = 'record_gpx';
   static const _keyRecordAlertLogs = 'record_alert_logs';
+  static const _keyRecordVirtualAlertLogs = 'record_virtual_alert_logs';
   static const _keyRoadSearchRadiusMeters = 'road_search_radius_meters';
   static const _keyCourtyardSearchRadiusMeters = 'courtyard_search_radius_meters';
   static const _keyStreetChangeDistanceMeters = 'street_change_distance_meters';
@@ -72,6 +73,7 @@ class SettingsService extends ChangeNotifier {
   bool _keepScreenOn = false;
   bool _recordGpx = false;
   bool _recordAlertLogs = false;
+  bool _recordVirtualAlertLogs = true; // Auto-record alert logs during GPX / test simulations
   double _roadSearchRadiusMeters = 40.0; // Recommended default 40m
   double _courtyardSearchRadiusMeters = 15.0; // Recommended default 15m
   double _streetChangeDistanceMeters = 20.0; // Recommended default 20m for fast scooter & car turns
@@ -104,6 +106,7 @@ class SettingsService extends ChangeNotifier {
   bool get keepScreenOn => _keepScreenOn;
   bool get recordGpx => _recordGpx;
   bool get recordAlertLogs => _recordAlertLogs;
+  bool get recordVirtualAlertLogs => _recordVirtualAlertLogs;
   double get roadSearchRadiusMeters => _roadSearchRadiusMeters;
   double get courtyardSearchRadiusMeters => _courtyardSearchRadiusMeters;
   double get streetChangeDistanceMeters => _streetChangeDistanceMeters;
@@ -163,6 +166,7 @@ class SettingsService extends ChangeNotifier {
     _keepScreenOn = prefs.getBool(_keyKeepScreenOn) ?? false;
     _recordGpx = prefs.getBool(_keyRecordGpx) ?? false;
     _recordAlertLogs = prefs.getBool(_keyRecordAlertLogs) ?? false;
+    _recordVirtualAlertLogs = prefs.getBool(_keyRecordVirtualAlertLogs) ?? true;
     _roadSearchRadiusMeters = (prefs.getDouble(_keyRoadSearchRadiusMeters) ?? 40.0).clamp(10.0, 150.0);
     _courtyardSearchRadiusMeters = (prefs.getDouble(_keyCourtyardSearchRadiusMeters) ?? 15.0).clamp(5.0, 40.0);
     _streetChangeDistanceMeters = (prefs.getDouble(_keyStreetChangeDistanceMeters) ?? 20.0).clamp(10.0, 100.0);
@@ -322,6 +326,13 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setRecordVirtualAlertLogs(bool value) async {
+    _recordVirtualAlertLogs = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyRecordVirtualAlertLogs, value);
+    notifyListeners();
+  }
+
   Future<void> setRoadSearchRadiusMeters(double value) async {
     _roadSearchRadiusMeters = value;
     final prefs = await SharedPreferences.getInstance();
@@ -464,6 +475,7 @@ class SettingsService extends ChangeNotifier {
       _keyKeepScreenOn: _keepScreenOn,
       _keyRecordGpx: _recordGpx,
       _keyRecordAlertLogs: _recordAlertLogs,
+      _keyRecordVirtualAlertLogs: _recordVirtualAlertLogs,
       _keyRoadSearchRadiusMeters: _roadSearchRadiusMeters,
       _keyCourtyardSearchRadiusMeters: _courtyardSearchRadiusMeters,
       _keyStreetChangeDistanceMeters: _streetChangeDistanceMeters,
@@ -561,6 +573,10 @@ class SettingsService extends ChangeNotifier {
       if (map.containsKey(_keyRecordAlertLogs)) {
         _recordAlertLogs = map[_keyRecordAlertLogs] == true;
         await prefs.setBool(_keyRecordAlertLogs, _recordAlertLogs);
+      }
+      if (map.containsKey(_keyRecordVirtualAlertLogs)) {
+        _recordVirtualAlertLogs = map[_keyRecordVirtualAlertLogs] == true;
+        await prefs.setBool(_keyRecordVirtualAlertLogs, _recordVirtualAlertLogs);
       }
       if (map.containsKey(_keyRoadSearchRadiusMeters)) {
         _roadSearchRadiusMeters = (map[_keyRoadSearchRadiusMeters] as num).toDouble();

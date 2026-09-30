@@ -17,12 +17,14 @@ import '../models/road_point.dart';
 class MockLocationService {
   final List<RoadPoint> _waypoints = List.of(defaultVentspilsRoute);
   final StreamController<RoadPoint> _pointController = StreamController<RoadPoint>.broadcast();
+  final StreamController<void> _simulationCompleteController = StreamController<void>.broadcast();
   Timer? _simulationTimer;
   int _currentIndex = 0;
   bool _isRunning = false;
 
   List<RoadPoint> get waypoints => List.unmodifiable(_waypoints);
   Stream<RoadPoint> get locationStream => _pointController.stream;
+  Stream<void> get simulationCompleteStream => _simulationCompleteController.stream;
   bool get isRunning => _isRunning;
   int get currentIndex => _currentIndex;
   int get totalWaypoints => _waypoints.length;
@@ -338,6 +340,7 @@ class MockLocationService {
       if (_currentIndex >= _waypoints.length) {
         // Route complete
         stopSimulation();
+        _simulationCompleteController.add(null);
         return;
       }
 
@@ -368,5 +371,6 @@ class MockLocationService {
   void dispose() {
     stopSimulation();
     _pointController.close();
+    _simulationCompleteController.close();
   }
 }
