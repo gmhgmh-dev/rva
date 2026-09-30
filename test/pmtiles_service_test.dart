@@ -153,9 +153,12 @@ void main() {
     });
 
     test('calculateDynamicLookaheadDistance scales with speed and clamps between 35m and 120m', () {
-      // < 15 km/h -> 0.0 (inactive)
+      // < 8 km/h -> 0.0 (inactive)
       expect(PMTilesService.calculateDynamicLookaheadDistance(0.0), equals(0.0));
-      expect(PMTilesService.calculateDynamicLookaheadDistance(10.0), equals(0.0));
+      expect(PMTilesService.calculateDynamicLookaheadDistance(5.0), equals(0.0));
+
+      // 10 km/h = 2.78 m/s * 4.5s = 12.5m -> clamped to 35m minimum
+      expect(PMTilesService.calculateDynamicLookaheadDistance(10.0), equals(35.0));
 
       // 20 km/h = 5.56 m/s * 4.5s = 25m -> clamped to 35m minimum
       expect(PMTilesService.calculateDynamicLookaheadDistance(20.0), equals(35.0));

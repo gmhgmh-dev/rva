@@ -41,6 +41,7 @@ class VoiceAssistantStateMachine {
   DateTime? _lastTrafficCalmingAlertTime;
   DateTime? _lastSpeedCameraAlertTime;
   String? _lastAlertedStreetName;
+  double? _currentStreetHeading;
   
   // Lookahead event tracking to prevent spam
   final Map<LookaheadEventType, DateTime> _lastLookaheadEventTimes = {};
@@ -113,6 +114,7 @@ class VoiceAssistantStateMachine {
     _lastTrafficCalmingAlertTime = null;
     _lastSpeedCameraAlertTime = null;
     _lastAlertedStreetName = null;
+    _currentStreetHeading = null;
     _lastLookaheadEventTimes.clear();
     _lastLookaheadEventLat = null;
     _lastLookaheadEventLon = null;
@@ -459,6 +461,7 @@ class VoiceAssistantStateMachine {
       lookaheadGiveWay: lookaheadGiveWay,
       lookaheadIntersections: lookaheadIntersections,
       enableSpeedAdaptiveDistance: enableSpeedAdaptiveDistance,
+      heading: point.heading,
     );
   }
 
@@ -476,6 +479,7 @@ class VoiceAssistantStateMachine {
     double? vehicleSpeedKmh,
     double? latitude,
     double? longitude,
+    double? heading,
     int speedTolerance = 0,
     SpeedToleranceMode toleranceMode = SpeedToleranceMode.fixed,
     double speedTolerancePercentage = 5.0,
@@ -894,8 +898,25 @@ class VoiceAssistantStateMachine {
           final double effectiveMinDistance;
           final int effectiveMinConfirmations;
           if (enableSpeedAdaptiveDistance && vehicleSpeedKmh != null && vehicleSpeedKmh <= 25.0) {
-            effectiveMinDistance = (streetChangeDistanceMeters * 0.5).clamp(10.0, 15.0);
-            effectiveMinConfirmations = streetChangeConfirmations.clamp(1, 2);
+            // Check if vehicle has actually made a turn (heading change >= 25 deg)
+            // or if it is maintaining straight trajectory through an intersection
+            bool isStraightTrajectory = false;
+            if (heading != null && _currentStreetHeading != null) {
+              double diff = (heading - _currentStreetHeading!).abs() % 180.0;
+              if (diff > 90.0) diff = 180.0 - diff;
+              if (diff < 25.0) {
+                isStraightTrajectory = true;
+              }
+            }
+            if (isStraightTrajectory) {
+              // Continuing straight: keep full distance and confirmations to avoid cross-street ghost turns
+              effectiveMinDistance = streetChangeDistanceMeters;
+              effectiveMinConfirmations = streetChangeConfirmations;
+            } else {
+              // Real turn or micromobility maneuver: fast crisp feedback
+              effectiveMinDistance = (streetChangeDistanceMeters * 0.5).clamp(10.0, 15.0);
+              effectiveMinConfirmations = streetChangeConfirmations.clamp(1, 2);
+            }
           } else {
             effectiveMinDistance = streetChangeDistanceMeters;
             effectiveMinConfirmations = streetChangeConfirmations;
@@ -913,6 +934,9 @@ class VoiceAssistantStateMachine {
           if (isDistanceMet) {
             // Apstiprināts, ka lietotājs tiešām ir nogriezies uz jauno ielu un nobraucis nepieciešamo distanci!
             _currentStreetName = normalizedNewStreet;
+            if (heading != null) {
+              _currentStreetHeading = heading;
+            }
             _pendingStreetCandidate = null;
             _pendingStreetConfirmations = 0;
             _pendingStreetDistanceMeters = 0.0;
@@ -1004,6 +1028,9 @@ class VoiceAssistantStateMachine {
         _pendingStreetDistanceMeters = 0.0;
         _lastCandidateLat = null;
         _lastCandidateLon = null;
+        if (heading != null && vehicleSpeedKmh != null && vehicleSpeedKmh > 10.0) {
+          _currentStreetHeading = heading;
+        }
       }
     }
 

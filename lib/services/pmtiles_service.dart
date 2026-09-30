@@ -219,12 +219,14 @@ class PMTilesService {
             final angleDiff = _angleDifference(vehicleHeading, bestSegmentBearing);
             if (angleDiff > 55.0) {
               // Perpendicular cross-street! Penalize heavily unless already on this street
-              headingPenalty = 12.0;
-            } else if (angleDiff > 35.0) {
-              headingPenalty = 2.5;
-            } else if (angleDiff < 25.0) {
+              headingPenalty = (vehicleSpeedKmh > 10.0 && normalizedCurrentRoad != null) ? 100.0 : 16.0;
+            } else if (angleDiff > 40.0) {
+              headingPenalty = (vehicleSpeedKmh > 15.0 && normalizedCurrentRoad != null) ? 25.0 : 4.0;
+            } else if (angleDiff > 25.0) {
+              headingPenalty = 1.5;
+            } else if (angleDiff < 20.0) {
               // Vehicle heading closely aligns with this road segment
-              headingPenalty = 0.5;
+              headingPenalty = 0.4;
             }
           }
 
@@ -305,7 +307,7 @@ class PMTilesService {
       // 2. If the vehicle is within courtyardSearchRadius to a courtyard driveway or residential way,
       // and the closest named road is significantly further away (> 25m), stay on the courtyard/service way.
       if (distAnyMeters <= effectiveCourtyardRadius && distNamedMeters > 25.0 && closestAnyFeature != null) {
-        if (!onEstablishedNamedRoad || distNamedMeters > 25.0) {
+        if (!onEstablishedNamedRoad || (distNamedMeters > 25.0 && (vehicleSpeedKmh == null || vehicleSpeedKmh < 18.0))) {
           final props = closestAnyFeature.decodeProperties();
           return _extractRoadAttributes(props, distAnyMeters);
         }
@@ -320,7 +322,12 @@ class PMTilesService {
       // 4. Fallback to closest any feature within roadSearchRadius
       if (distAnyMeters <= effectiveMaxRadius && closestAnyFeature != null) {
         final props = closestAnyFeature.decodeProperties();
-        return _extractRoadAttributes(props, distAnyMeters);
+        final rawClass = (props['class']?.value ?? props['highway']?.value)?.toString().toLowerCase() ?? '';
+        final isMinorService = rawClass == 'service' || rawClass == 'parking';
+        // If moving at driving speed (> 18 km/h) on an established named road, do not snap to courtyard/service driveway
+        if (!isMinorService || !onEstablishedNamedRoad || (vehicleSpeedKmh != null && vehicleSpeedKmh < 18.0)) {
+          return _extractRoadAttributes(props, distAnyMeters);
+        }
       }
 
       // 5. Smart fallback: if moving at micro-mobility speed (<= 30 km/h) and a cycleway/footway is within 15m,
@@ -527,7 +534,7 @@ class PMTilesService {
 
   /// Calculates dynamic lookahead distance in meters based on vehicle speed in km/h.
   static double calculateDynamicLookaheadDistance(double speedKmh, {double defaultDistance = 70.0}) {
-    if (speedKmh < 15.0) return 0.0; // Inactive at very low speeds / maneuvering
+    if (speedKmh < 8.0) return 0.0; // Inactive when fully stopped / parking
     final speedMs = speedKmh / 3.6;
     // Lookahead ~4.5 seconds ahead, clamped between 35m and 120m
     return (speedMs * 4.5).clamp(35.0, 120.0);

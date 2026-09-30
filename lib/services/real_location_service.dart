@@ -201,7 +201,7 @@ class RealLocationService {
 
           RoadAttributes? lookaheadAttrs;
           double? lookaheadDist;
-          if (heading != null && speedKmh >= 15.0) {
+          if (heading != null && speedKmh >= 8.0) {
             lookaheadDist = PMTilesService.calculateDynamicLookaheadDistance(speedKmh);
             try {
               lookaheadAttrs = await pmTilesService!.getLookaheadRoadAttributes(
@@ -227,7 +227,7 @@ class RealLocationService {
           }
 
           List<LookaheadEvent> lookaheadEvents = [];
-          if (heading != null && speedKmh >= 15.0) {
+          if (heading != null && speedKmh >= 8.0) {
              try {
                lookaheadEvents = await pmTilesService!.getLookaheadEvents(
                  lat,

@@ -147,14 +147,14 @@ class PathTraversalHelper {
         
         if (distMeters < 15.0) { // Within 15 meters of the path
           final props = poi.decodeProperties();
-          final highway = props['highway']?.value.toString().toLowerCase();
+          final highway = (props['highway'] ?? props['subclass'] ?? props['class'])?.value.toString().toLowerCase();
           
           LookaheadEventType? type;
-          if (highway == 'traffic_signals') {
+          if (highway == 'traffic_signals' || highway == 'traffic_light' || props.containsKey('traffic_signals')) {
             type = LookaheadEventType.trafficLight;
-          } else if (highway == 'stop') {
+          } else if (highway == 'stop' || highway == 'stop_sign') {
             type = LookaheadEventType.stopSign;
-          } else if (highway == 'give_way') {
+          } else if (highway == 'give_way' || highway == 'yield') {
             type = LookaheadEventType.giveWay;
           }
           

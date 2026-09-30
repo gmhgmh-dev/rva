@@ -1912,5 +1912,144 @@ void main() {
       expect(events.first.type, equals(VoiceAlertType.giveWayAhead));
       expect(events.first.spokenText, equals('Priekšā stop zīme.'));
     });
+
+    test('Straight crossing: vehicle maintains straight trajectory across intersection, suppressing cross-street ghost turn', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialStreetName: 'Inženieru iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // 1. Vehicle is driving stably on Inženieru iela heading West (270 deg) at 35 km/h
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38500,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 35.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Inženieru iela',
+          heading: 270.0,
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      // 2. Slows down to 20 km/h crossing intersection. Perpendicular cross-street "Saules iela" candidate
+      // appears for 15 meters, but vehicle heading is still 270 deg (straight through, no turn!).
+      final p1 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38500,
+          longitude: 21.55990,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          heading: 270.0, // Heading maintained straight!
+          timestamp: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+        enableSpeedAdaptiveDistance: true,
+        streetChangeDistanceMeters: 25.0,
+      );
+      expect(p1.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+
+      final p2 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38500,
+          longitude: 21.55975,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          heading: 271.0, // Still straight!
+          timestamp: DateTime.now().add(const Duration(seconds: 2)),
+        ),
+        enableSpeedAdaptiveDistance: true,
+        streetChangeDistanceMeters: 25.0,
+      );
+      expect(p2.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+
+      // 3. Immediately past intersection, Inženieru iela resumes. No spurious announcements occurred!
+      final p3 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38500,
+          longitude: 21.55950,
+          vehicleSpeedKmh: 30.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Inženieru iela',
+          heading: 270.0,
+          timestamp: DateTime.now().add(const Duration(seconds: 3)),
+        ),
+        enableSpeedAdaptiveDistance: true,
+        streetChangeDistanceMeters: 25.0,
+      );
+      expect(p3.where((e) => e.type == VoiceAlertType.streetChanged), isEmpty);
+      expect(sm.currentStreetName, equals('Inženieru iela'));
+    });
+
+    test('Real turn: vehicle turns 90 degrees onto new street, confirming turn quickly with speed-adaptive distance', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialStreetName: 'Inženieru iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // 1. Driving stably on Inženieru iela heading West (270 deg)
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38500,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 35.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Inženieru iela',
+          heading: 270.0,
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      // 2. Slows to 18 km/h and TURNS South (heading changes from 270 to 180 deg) onto Saules iela
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38490,
+          longitude: 21.55980,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          heading: 180.0, // Turned 90 degrees!
+          timestamp: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+        enableSpeedAdaptiveDistance: true,
+        streetChangeDistanceMeters: 25.0,
+        streetChangeConfirmations: 2,
+      );
+
+      // Second point along Saules iela (12m further South, heading 180 deg)
+      final turnEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.38475,
+          longitude: 21.55980,
+          vehicleSpeedKmh: 18.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          heading: 180.0,
+          timestamp: DateTime.now().add(const Duration(seconds: 2)),
+        ),
+        enableSpeedAdaptiveDistance: true,
+        streetChangeDistanceMeters: 25.0,
+        streetChangeConfirmations: 2,
+      );
+
+      final streetChanged = turnEvents.where((e) => e.type == VoiceAlertType.streetChanged).toList();
+      expect(streetChanged.length, equals(1));
+      expect(streetChanged.first.spokenText, contains('Saules'));
+      expect(sm.currentStreetName, equals('Saules iela'));
+    });
   });
 }
