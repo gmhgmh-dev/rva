@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:pmtiles/pmtiles.dart';
 import 'package:vector_tile/vector_tile.dart';
 import '../models/lookahead_event.dart';
 
@@ -137,7 +136,7 @@ class PathTraversalHelper {
 
       // Check POIs near this segment
       for (final poi in poiFeatures) {
-        if (processedPoiIds.contains(poi.id)) continue;
+        if (processedPoiIds.contains(poi.id.toInt())) continue;
         final geom = poi.decodePoint();
         if (geom.isEmpty || geom[0].length < 2) continue;
         final px = geom[0][0].toDouble();
@@ -151,9 +150,13 @@ class PathTraversalHelper {
           final highway = props['highway']?.value.toString().toLowerCase();
           
           LookaheadEventType? type;
-          if (highway == 'traffic_signals') type = LookaheadEventType.trafficLight;
-          else if (highway == 'stop') type = LookaheadEventType.stopSign;
-          else if (highway == 'give_way') type = LookaheadEventType.giveWay;
+          if (highway == 'traffic_signals') {
+            type = LookaheadEventType.trafficLight;
+          } else if (highway == 'stop') {
+            type = LookaheadEventType.stopSign;
+          } else if (highway == 'give_way') {
+            type = LookaheadEventType.giveWay;
+          }
           
           if (type != null) {
             events.add(LookaheadEvent(
@@ -170,7 +173,7 @@ class PathTraversalHelper {
       // Check Intersections with other roads
       for (final road in allRoadLines) {
         final feature = road['feature'] as VectorTileFeature;
-        if (processedRoadIds.contains(feature.id)) continue;
+        if (processedRoadIds.contains(feature.id.toInt())) continue;
         
         final lines = road['lines'] as List<List<List<int>>>;
         bool intersects = false;
@@ -253,11 +256,11 @@ class PathTraversalHelper {
     return diff;
   }
 
-  static bool _segmentsIntersect(double p0_x, double p0_y, double p1_x, double p1_y, double p2_x, double p2_y, double p3_x, double p3_y) {
-    double s1_x = p1_x - p0_x; double s1_y = p1_y - p0_y;
-    double s2_x = p3_x - p2_x; double s2_y = p3_y - p2_y;
-    double s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) / (-s2_x * s1_y + s1_x * s2_y);
-    double t = ( s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) / (-s2_x * s1_y + s1_x * s2_y);
+  static bool _segmentsIntersect(double p0x, double p0y, double p1x, double p1y, double p2x, double p2y, double p3x, double p3y) {
+    final s1x = p1x - p0x; final s1y = p1y - p0y;
+    final s2x = p3x - p2x; final s2y = p3y - p2y;
+    final s = (-s1y * (p0x - p2x) + s1x * (p0y - p2y)) / (-s2x * s1y + s1x * s2y);
+    final t = ( s2x * (p0y - p2y) - s2y * (p0x - p2x)) / (-s2x * s1y + s1x * s2y);
     return (s >= 0 && s <= 1 && t >= 0 && t <= 1);
   }
 }

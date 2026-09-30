@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rva/models/lookahead_event.dart';
 import 'package:rva/models/road_point.dart';
 import 'package:rva/models/voice_alert_event.dart';
 import 'package:rva/services/voice_assistant_state_machine.dart';
@@ -1541,6 +1542,157 @@ void main() {
       expect(events.length, equals(1));
       expect(events.first.type, equals(VoiceAlertType.streetChanged));
       expect(events.first.spokenText, equals('Nogriezāties uz Ganību iela.'));
+    });
+  });
+
+  group('Lookahead Advanced Events Tests', () {
+    test('Traffic light lookahead event triggers alert and respects 45s cooldown at same location', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+      );
+
+      final point1 = RoadPoint(
+        latitude: 57.3950,
+        longitude: 21.5650,
+        vehicleSpeedKmh: 40.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Kuldīgas iela',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.trafficLight,
+            distanceMeters: 60.0,
+            latitude: 57.3950,
+            longitude: 21.5650,
+          ),
+        ],
+      );
+
+      final events1 = sm.processRoadPoint(point1, lookaheadTrafficLights: true);
+      expect(events1.where((e) => e.type == VoiceAlertType.trafficLightAhead).length, equals(1));
+      expect(events1.first.spokenText, equals('Priekšā luksofors.'));
+
+      // Subsequent point 5 seconds later at same location should NOT trigger duplicate alert (cooldown)
+      final point2 = RoadPoint(
+        latitude: 57.3951,
+        longitude: 21.5650,
+        vehicleSpeedKmh: 35.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Kuldīgas iela',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 5),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.trafficLight,
+            distanceMeters: 50.0,
+            latitude: 57.3951,
+            longitude: 21.5650,
+          ),
+        ],
+      );
+
+      final events2 = sm.processRoadPoint(point2, lookaheadTrafficLights: true);
+      expect(events2.where((e) => e.type == VoiceAlertType.trafficLightAhead), isEmpty);
+    });
+
+    test('Give way, stop sign, and main road reminder trigger correct Latvian announcements', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Ganību iela',
+      );
+
+      // 1. Give way
+      final pGiveWay = RoadPoint(
+        latitude: 57.3960,
+        longitude: 21.5660,
+        vehicleSpeedKmh: 30.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Ganību iela',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.giveWay,
+            distanceMeters: 50.0,
+            latitude: 57.3960,
+            longitude: 21.5660,
+          ),
+        ],
+      );
+      final eGiveWay = sm.processRoadPoint(pGiveWay, lookaheadGiveWay: true);
+      expect(eGiveWay.any((e) => e.type == VoiceAlertType.giveWayAhead && e.spokenText == 'Priekšā dodiet ceļu.'), isTrue);
+
+      // 2. Main road reminder (different type, so not blocked by giveWay cooldown)
+      final pMainRoad = RoadPoint(
+        latitude: 57.3962,
+        longitude: 21.5662,
+        vehicleSpeedKmh: 30.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Ganību iela',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 5),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.mainRoadReminder,
+            distanceMeters: 45.0,
+            latitude: 57.3962,
+            longitude: 21.5662,
+          ),
+        ],
+      );
+      final eMainRoad = sm.processRoadPoint(pMainRoad, lookaheadIntersections: true);
+      expect(eMainRoad.any((e) => e.type == VoiceAlertType.mainRoadReminder && e.spokenText == 'Krustojums. Jūs esat uz galvenā ceļa.'), isTrue);
+    });
+
+    test('Disabled lookahead toggles prevent announcements', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+      );
+
+      final point = RoadPoint(
+        latitude: 57.3970,
+        longitude: 21.5670,
+        vehicleSpeedKmh: 35.0,
+        maxSpeedLimitKmh: 50,
+        isOneWay: false,
+        streetName: 'Lielais prospekts',
+        timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        lookaheadEvents: [
+          LookaheadEvent(
+            type: LookaheadEventType.trafficLight,
+            distanceMeters: 50.0,
+            latitude: 57.3970,
+            longitude: 21.5670,
+          ),
+          LookaheadEvent(
+            type: LookaheadEventType.giveWay,
+            distanceMeters: 50.0,
+            latitude: 57.3970,
+            longitude: 21.5670,
+          ),
+          LookaheadEvent(
+            type: LookaheadEventType.mainRoadReminder,
+            distanceMeters: 50.0,
+            latitude: 57.3970,
+            longitude: 21.5670,
+          ),
+        ],
+      );
+
+      final events = sm.processRoadPoint(
+        point,
+        lookaheadTrafficLights: false,
+        lookaheadGiveWay: false,
+        lookaheadIntersections: false,
+      );
+
+      expect(events, isEmpty);
     });
   });
 }

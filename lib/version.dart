@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// Centralized application version and release metadata.
 /// 
 /// Values can be overridden at build time via dart-define:
