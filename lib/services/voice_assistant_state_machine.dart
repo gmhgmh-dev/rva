@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../models/lookahead_event.dart';
 import '../models/road_point.dart';
 import '../models/voice_alert_event.dart';
 import 'settings_service.dart';
@@ -133,10 +134,14 @@ class VoiceAssistantStateMachine {
 
   /// Checks if two street names represent the same valid street.
   static bool areSameStreets(String? street1, String? street2) {
+    if (street1 == null && street2 == null) return true;
     final s1 = cleanStreetName(street1);
     final s2 = cleanStreetName(street2);
-    if (s1 == null || s2 == null) return false;
-    return s1.toLowerCase() == s2.toLowerCase();
+    if (s1 != null && s2 != null) {
+      return s1.toLowerCase() == s2.toLowerCase();
+    }
+    // If one or both are generic / unnamed, compare raw trimmed strings
+    return street1?.trim().toLowerCase() == street2?.trim().toLowerCase();
   }
 
   /// Formats dynamic street and speed limit announcement:
@@ -496,6 +501,7 @@ class VoiceAssistantStateMachine {
     final now = timestamp ?? DateTime.now();
     final events = <VoiceAlertEvent>[];
     final String? normalizedNewStreet = streetName?.trim();
+    final String? previousStreetName = _currentStreetName;
 
     // Determine if road is living street (20 km/h)
     final isLiving = (roadClass?.toLowerCase() == 'living_street') ||
@@ -526,7 +532,6 @@ class VoiceAssistantStateMachine {
         _isCurrentWayFootway = currentIsFoot;
         if (normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
           _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
-          _currentStreetName = normalizedNewStreet;
         }
         String text;
         if (currentIsCycle && !currentIsFoot) {
@@ -563,7 +568,6 @@ class VoiceAssistantStateMachine {
         _currentMaxSpeed = 20;
         if (normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
           _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
-          _currentStreetName = normalizedNewStreet;
         }
         events.add(
           VoiceAlertEvent(
@@ -614,7 +618,6 @@ class VoiceAssistantStateMachine {
             _isIn30SpeedZone = true;
             if (normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
               _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
-              _currentStreetName = normalizedNewStreet;
             }
             events.add(
               VoiceAlertEvent(
@@ -628,7 +631,7 @@ class VoiceAssistantStateMachine {
             );
           } else {
             _isIn30SpeedZone = false;
-            final isSame = (_currentStreetName == null) || (streetName == null) || areSameStreets(_currentStreetName, streetName);
+            final isSame = (previousStreetName == null) || (streetName == null) || areSameStreets(previousStreetName, streetName);
             final spoken = useDynamicPhrases
                 ? formatSpeedReductionAnnouncement(
                     streetName: streetName,
@@ -638,7 +641,6 @@ class VoiceAssistantStateMachine {
                 : 'Samazināts ātruma ierobežojums: $effectiveSpeed kilometri stundā.';
             if (!isSame && normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
               _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
-              _currentStreetName = normalizedNewStreet;
             }
             events.add(
               VoiceAlertEvent(
@@ -656,8 +658,8 @@ class VoiceAssistantStateMachine {
         // effectiveSpeed >= 50
         // TRIGERIS 2: Ja atļautais ātrums atkal atgriežas uz 50 km/h vai vairāk
         if (_isInReducedSpeedZone || _isIn30SpeedZone) {
-          final isSame = (_currentStreetName == null) || (streetName == null) || areSameStreets(_currentStreetName, streetName);
-          if (isSame) {
+          final isSame = (previousStreetName == null) || (streetName == null) || areSameStreets(previousStreetName, streetName);
+          if (isSame || !useDynamicPhrases || !announceStreetChanges) {
             _pendingSpeedRestorationConfirmations++;
             if (_pendingSpeedRestorationConfirmations >= speedRestorationConfirmations) {
               final wasInActualZone = _isIn30SpeedZone;
@@ -683,7 +685,7 @@ class VoiceAssistantStateMachine {
                 final spoken = formatSpeedRestoredAnnouncement(
                   streetName: streetName,
                   maxSpeed: effectiveSpeed,
-                  isSameStreet: true,
+                  isSameStreet: isSame,
                   style: alertStyle,
                 );
                 if (streetName != null) {
@@ -702,7 +704,8 @@ class VoiceAssistantStateMachine {
               }
             }
           } else {
-            // !isSame: Turning onto a new street.
+            // !isSame && useDynamicPhrases && announceStreetChanges:
+            // Turning onto a new street.
             // Do NOT emit premature speedRestored alert here before the turn is confirmed by distance!
             // When Section 4 (or Section 3 if one-way) confirms the turn via isDistanceMet,
             // it will perform Smart Fusion:
@@ -725,7 +728,7 @@ class VoiceAssistantStateMachine {
         _isOneWay = true;
         _pendingOneWayExitConfirmations = 0;
 
-        final isSame = (_currentStreetName == null) || (streetName == null) || areSameStreets(_currentStreetName, streetName);
+        final isSame = (previousStreetName == null) || (streetName == null) || areSameStreets(previousStreetName, streetName);
         if (useDynamicPhrases) {
           // Smart Fusion: Check if speedReduced was just emitted in Section 2 for this point
           final speedReducedIdx = events.indexWhere((e) => e.type == VoiceAlertType.speedReduced);
@@ -890,7 +893,7 @@ class VoiceAssistantStateMachine {
           final double effectiveMinDistance;
           final int effectiveMinConfirmations;
           if (enableSpeedAdaptiveDistance && vehicleSpeedKmh != null && vehicleSpeedKmh <= 25.0) {
-            effectiveMinDistance = streetChangeDistanceMeters.clamp(10.0, 15.0);
+            effectiveMinDistance = (streetChangeDistanceMeters * 0.5).clamp(10.0, 15.0);
             effectiveMinConfirmations = streetChangeConfirmations.clamp(1, 2);
           } else {
             effectiveMinDistance = streetChangeDistanceMeters;

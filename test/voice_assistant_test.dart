@@ -1294,4 +1294,253 @@ void main() {
       expect(changeEvents.first.spokenText, equals('Nogriezāties uz Lielais prospekts.'));
     });
   });
+
+  group('Smart Fusion Speed Restored on Turn & Micromobility Speed-Adaptive Tests', () {
+    test('Detailed style: turning from 30 km/h street onto 50 km/h street fuses speed end and turn, preventing duplicate street name', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      // Establish speed restriction 30 km/h on Kuldīgas iela (not a zone)
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39450,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime(2026, 9, 30, 11, 59, 50),
+        ),
+      );
+
+      // Point 1: Vehicle turns onto Ganību iela (candidate point 1, 0m driven on Ganību)
+      final e1 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+      // Turn not yet confirmed by distance, so no premature speed restoration or street alert
+      expect(e1, isEmpty);
+
+      // Point 2: Vehicle drives 22 meters along Ganību iela (latitude += 0.00020 ~ 22m)
+      final e2 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39520,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 4),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+
+      // Exactly ONE fused event: speedRestored with turn announcement!
+      expect(e2.length, equals(1));
+      expect(e2.first.type, equals(VoiceAlertType.speedRestored));
+      expect(e2.first.spokenText, equals('Ātruma ierobežojums ir beidzies. Nogriezāties uz Ganību iela.'));
+
+      // Point 3: Continuing on Ganību iela - MUST NOT repeat street name or announce duplicate turn!
+      final e3 = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39540,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 8),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+      expect(e3, isEmpty);
+    });
+
+    test('Concise style: turning from 30 km/h street onto 50 km/h street produces concise fused announcement', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // Establish speed restriction 30 km/h on Kuldīgas iela (not a zone)
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39450,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime(2026, 9, 30, 11, 59, 50),
+        ),
+      );
+
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39525,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 3),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.speedRestored));
+      expect(events.first.spokenText, equals('Ierobežojums beidzies. Ganību iela.'));
+    });
+
+    test('Turning out of 30 km/h zone onto 50 km/h street fuses zone ended with street name', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 30,
+        initialIsOneWay: false,
+        initialStreetName: 'Katoļu iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      // Establish 30 km/h zone
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39400,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 25.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          isZone: true,
+          streetName: 'Katoļu iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        ),
+      );
+      expect(sm.isIn30SpeedZone, isTrue);
+
+      // Turn candidate onto Lielais prospekts (50 km/h, zone ends)
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 5),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+
+      // Confirm turn
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39525,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 20.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          isZone: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 9),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 2,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.speedZoneEnded));
+      expect(events.first.spokenText, equals('Atruma ierobežojuma zona ir beigusies. Nogriezāties uz Lielais prospekts.'));
+      expect(sm.isIn30SpeedZone, isFalse);
+    });
+
+    test('Speed-adaptive mode for micromobility (e-scooter/bike <= 25 km/h) triggers turn much faster (~11 meters)', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      // Scooter speed = 15 km/h. Distance = ~11m (0.00010 lat ~ 11.1 meters)
+      // Candidate point 1 (0m)
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 15.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 0),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 3,
+        enableSpeedAdaptiveDistance: true,
+      );
+
+      // Point 2: 11.1 meters driven
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39510,
+          longitude: 21.56500,
+          vehicleSpeedKmh: 15.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Ganību iela',
+          timestamp: DateTime(2026, 9, 30, 12, 0, 3),
+        ),
+        streetChangeDistanceMeters: 20.0,
+        streetChangeConfirmations: 3,
+        enableSpeedAdaptiveDistance: true,
+      );
+
+      // With speed-adaptive distance enabled for <= 25 km/h, 11m and 2 points is enough to confirm!
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.streetChanged));
+      expect(events.first.spokenText, equals('Nogriezāties uz Ganību iela.'));
+    });
+  });
 }

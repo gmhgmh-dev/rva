@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import '../models/lookahead_event.dart';
 import '../models/road_attributes.dart';
 import '../models/road_point.dart';
 import 'pmtiles_service.dart';

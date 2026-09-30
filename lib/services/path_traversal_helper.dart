@@ -139,9 +139,9 @@ class PathTraversalHelper {
       for (final poi in poiFeatures) {
         if (processedPoiIds.contains(poi.id)) continue;
         final geom = poi.decodePoint();
-        if (geom.isEmpty || geom[0].isEmpty) continue;
-        final px = geom[0][0][0].toDouble();
-        final py = geom[0][0][1].toDouble();
+        if (geom.isEmpty || geom[0].length < 2) continue;
+        final px = geom[0][0].toDouble();
+        final py = geom[0][1].toDouble();
         
         final distSq = _pointToSegmentDistanceSq(px, py, p1[0].toDouble(), p1[1].toDouble(), p2[0].toDouble(), p2[1].toDouble());
         final distMeters = sqrt(distSq) * metersPerPixel;
