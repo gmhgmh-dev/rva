@@ -1,3 +1,5 @@
+import 'lookahead_event.dart';
+
 /// Model representing a GPS waypoint with road attributes such as speed limit
 /// and whether the street is one-way.
 class RoadPoint {
@@ -21,6 +23,7 @@ class RoadPoint {
   final String? trafficCalmingAheadType;
   final bool hasSpeedCameraAhead;
   final int? speedCameraLimitAhead;
+  final List<LookaheadEvent> lookaheadEvents;
 
   const RoadPoint({
     required this.latitude,
@@ -43,6 +46,7 @@ class RoadPoint {
     this.trafficCalmingAheadType,
     this.hasSpeedCameraAhead = false,
     this.speedCameraLimitAhead,
+    this.lookaheadEvents = const [],
   });
 
   bool get isPedestrianOrBicycle => isCycleway || isFootway || isPath;
@@ -68,6 +72,7 @@ class RoadPoint {
     String? trafficCalmingAheadType,
     bool? hasSpeedCameraAhead,
     int? speedCameraLimitAhead,
+    List<LookaheadEvent>? lookaheadEvents,
   }) {
     return RoadPoint(
       latitude: latitude ?? this.latitude,
@@ -90,6 +95,7 @@ class RoadPoint {
       trafficCalmingAheadType: trafficCalmingAheadType ?? this.trafficCalmingAheadType,
       hasSpeedCameraAhead: hasSpeedCameraAhead ?? this.hasSpeedCameraAhead,
       speedCameraLimitAhead: speedCameraLimitAhead ?? this.speedCameraLimitAhead,
+      lookaheadEvents: lookaheadEvents ?? this.lookaheadEvents,
     );
   }
 

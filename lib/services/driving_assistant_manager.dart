@@ -316,6 +316,19 @@ class DrivingAssistantManager extends ChangeNotifier {
             isPath: roadAttr.isPath,
           );
         }
+
+        if (point.heading != null && point.vehicleSpeedKmh >= 15.0) {
+          final lookaheadEvents = await pmTilesService.getLookaheadEvents(
+            point.latitude,
+            point.longitude,
+            heading: point.heading!,
+            speedKmh: point.vehicleSpeedKmh,
+            currentRoadName: stateMachine.currentStreetName,
+          );
+          if (lookaheadEvents.isNotEmpty) {
+             effectivePoint = effectivePoint.copyWith(lookaheadEvents: lookaheadEvents);
+          }
+        }
       } catch (e) {
         debugPrint('PMTiles lookup error during simulation: $e');
       }
@@ -341,6 +354,7 @@ class DrivingAssistantManager extends ChangeNotifier {
       lookaheadAlertsEnabled: settingsService.lookaheadAlerts,
       trafficCalmingAlertsEnabled: settingsService.trafficCalmingAlerts,
       speedCameraAlertsEnabled: settingsService.speedCameraAlerts,
+      enableSpeedAdaptiveDistance: settingsService.enableSpeedAdaptiveDistance,
     );
 
     // Announce initial street and limit when acquiring the first real GPS fix

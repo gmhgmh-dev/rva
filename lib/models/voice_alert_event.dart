@@ -38,6 +38,21 @@ enum VoiceAlertType {
 
   /// Trigger 13: Upcoming stationary speed enforcement camera
   speedCameraAhead,
+
+  /// Trigger 14: Lookahead traffic light warning
+  trafficLightAhead,
+
+  /// Trigger 15: Lookahead give way warning
+  giveWayAhead,
+
+  /// Trigger 16: Lookahead main road reminder
+  mainRoadReminder,
+
+  /// Trigger 17: Lookahead equal intersection warning
+  equalIntersectionAhead,
+
+  /// Trigger 18: Lookahead main road turns warning
+  mainRoadTurns,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

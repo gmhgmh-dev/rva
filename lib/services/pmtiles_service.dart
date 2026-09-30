@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:pmtiles/pmtiles.dart';
 import 'package:vector_tile/vector_tile.dart';
 import '../models/road_attributes.dart';
+import '../models/lookahead_event.dart';
+import 'path_traversal_helper.dart';
 
 /// Local PMTiles service for querying vector map tiles offline.
 /// Reads local latvia.pmtiles and extracts road attributes (maxspeed, oneway, name)
@@ -551,6 +553,62 @@ class PMTilesService {
       maxRadiusMeters: 30.0,
       courtyardRadiusMeters: 15.0,
     );
+  }
+
+  /// Traverses the road ahead to find specific events like traffic lights, give way signs, and intersections.
+  Future<List<LookaheadEvent>> getLookaheadEvents(
+    double currentLat,
+    double currentLon, {
+    required double heading,
+    required double speedKmh,
+    double? customLookaheadDistance,
+    String? currentRoadName,
+  }) async {
+    final archive = _archive;
+    if (archive == null) return [];
+
+    final maxDistance = customLookaheadDistance ?? calculateDynamicLookaheadDistance(speedKmh);
+    if (maxDistance <= 0) return [];
+
+    final z = 14;
+    final n = 1 << z;
+    final tileXDouble = (currentLon + 180.0) / 360.0 * n;
+    final tileX = tileXDouble.floor().clamp(0, n - 1);
+    final rad = currentLat * pi / 180.0;
+    final sinLat = sin(rad).clamp(-0.9999, 0.9999);
+    final tileYDouble = (1.0 - 0.5 * log((1.0 + sinLat) / (1.0 - sinLat)) / pi) / 2.0 * n;
+    final tileY = tileYDouble.floor().clamp(0, n - 1);
+    final tileId = ZXY(z, tileX, tileY).toTileId();
+
+    try {
+      final entry = await archive.lookup(tileId);
+      if (entry == null) return [];
+
+      final tile = await archive.tile(tileId);
+      final tileBytes = Uint8List.fromList(tile.bytes());
+      final vectorTile = VectorTile.fromBytes(bytes: tileBytes);
+
+      final extent = 4096;
+      final px = (tileXDouble - tileX) * extent;
+      final py = (tileYDouble - tileY) * extent;
+      final metersPerPixel = (cos(rad) * 40075016.686) / (n * extent);
+
+      return PathTraversalHelper.traverse(
+        tile: vectorTile,
+        startPx: px,
+        startPy: py,
+        heading: heading,
+        extent: extent,
+        metersPerPixel: metersPerPixel,
+        maxDistanceMeters: maxDistance,
+        currentRoadName: currentRoadName,
+        currentLat: currentLat,
+        currentLon: currentLon,
+      );
+    } catch (e) {
+      debugPrint('Lookahead events error: $e');
+      return [];
+    }
   }
 
   static int? _parseIntValue(Object value) {

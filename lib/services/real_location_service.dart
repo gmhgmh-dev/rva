@@ -225,6 +225,19 @@ class RealLocationService {
             lookaheadMaxSpeed = lookaheadResolvedSpeed;
           }
 
+          List<LookaheadEvent> lookaheadEvents = [];
+          if (heading != null && speedKmh >= 15.0) {
+             try {
+               lookaheadEvents = await pmTilesService!.getLookaheadEvents(
+                 lat,
+                 lon,
+                 heading: heading,
+                 speedKmh: speedKmh,
+                 currentRoadName: currentRoadName,
+               );
+             } catch (_) {}
+          }
+
           _updateCache(lat, lon, enrichedAttrs);
           _pointController.add(_createRoadPoint(
             lat: lat,
@@ -240,6 +253,7 @@ class RealLocationService {
             trafficCalmingAheadType: roadAttrs.trafficCalmingType ?? lookaheadAttrs?.trafficCalmingType,
             hasSpeedCameraAhead: roadAttrs.hasSpeedCamera || (lookaheadAttrs?.hasSpeedCamera ?? false),
             speedCameraLimitAhead: roadAttrs.speedCameraLimit ?? lookaheadAttrs?.speedCameraLimit,
+            lookaheadEvents: lookaheadEvents,
           ));
           return;
         }
@@ -701,6 +715,7 @@ class RealLocationService {
     String? trafficCalmingAheadType,
     bool hasSpeedCameraAhead = false,
     int? speedCameraLimitAhead,
+    List<LookaheadEvent> lookaheadEvents = const [],
   }) {
     String street = (attributes.name != null && attributes.name!.trim().isNotEmpty && attributes.name!.trim().toLowerCase() != 'iela')
         ? attributes.name!.trim()
@@ -738,6 +753,7 @@ class RealLocationService {
       trafficCalmingAheadType: trafficCalmingAheadType,
       hasSpeedCameraAhead: hasSpeedCameraAhead,
       speedCameraLimitAhead: speedCameraLimitAhead,
+      lookaheadEvents: lookaheadEvents,
     );
   }
 

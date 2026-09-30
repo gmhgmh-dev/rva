@@ -34,6 +34,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyCourtyardSearchRadiusMeters = 'courtyard_search_radius_meters';
   static const _keyStreetChangeDistanceMeters = 'street_change_distance_meters';
   static const _keyStreetChangeConfirmations = 'street_change_confirmations';
+  static const _keyEnableSpeedAdaptiveDistance = 'enable_speed_adaptive_distance';
   static const _keySpeedRestorationConfirmations = 'speed_restoration_confirmations';
   static const _keyOneWayExitConfirmations = 'one_way_exit_confirmations';
   static const _keyFilterStaleGpsFixes = 'filter_stale_gps_fixes';
@@ -42,6 +43,9 @@ class SettingsService extends ChangeNotifier {
   static const _keyAudioDucking = 'audio_ducking';
   static const _keyLookaheadAlerts = 'lookahead_alerts';
   static const _keyLookaheadDistanceMeters = 'lookahead_distance_meters';
+  static const _keyLookaheadTrafficLights = 'lookahead_traffic_lights';
+  static const _keyLookaheadGiveWay = 'lookahead_give_way';
+  static const _keyLookaheadIntersections = 'lookahead_intersections';
   static const _keyTrafficCalmingAlerts = 'traffic_calming_alerts';
   static const _keySpeedCameraAlerts = 'speed_camera_alerts';
   static const _keyTtsEngine = 'tts_engine';
@@ -70,8 +74,9 @@ class SettingsService extends ChangeNotifier {
   bool _recordAlertLogs = false;
   double _roadSearchRadiusMeters = 40.0; // Recommended default 40m
   double _courtyardSearchRadiusMeters = 15.0; // Recommended default 15m
-  double _streetChangeDistanceMeters = 35.0; // Recommended default 35m for scooter & car
-  int _streetChangeConfirmations = 4; // Recommended default: 4 points (~4s)
+  double _streetChangeDistanceMeters = 20.0; // Recommended default 20m for fast scooter & car turns
+  int _streetChangeConfirmations = 3; // Recommended default: 3 points (~3s)
+  bool _enableSpeedAdaptiveDistance = true; // Auto-scale distance & confirmations for micromobility (<= 25 km/h)
   int _speedRestorationConfirmations = 4; // Recommended default: 4 points (~4s)
   int _oneWayExitConfirmations = 3; // Recommended default: 3 points (~3s)
   bool _filterStaleGpsFixes = true; // Recommended default: true
@@ -80,6 +85,9 @@ class SettingsService extends ChangeNotifier {
   bool _audioDucking = true; // Recommended default: true
   bool _lookaheadAlerts = true; // Recommended default: true
   double _lookaheadDistanceMeters = 70.0; // Recommended default 70m
+  bool _lookaheadTrafficLights = true;
+  bool _lookaheadGiveWay = true;
+  bool _lookaheadIntersections = true;
   bool _trafficCalmingAlerts = true; // Recommended default: true
   bool _speedCameraAlerts = true; // Recommended default: true
 
@@ -100,6 +108,7 @@ class SettingsService extends ChangeNotifier {
   double get courtyardSearchRadiusMeters => _courtyardSearchRadiusMeters;
   double get streetChangeDistanceMeters => _streetChangeDistanceMeters;
   int get streetChangeConfirmations => _streetChangeConfirmations;
+  bool get enableSpeedAdaptiveDistance => _enableSpeedAdaptiveDistance;
   int get speedRestorationConfirmations => _speedRestorationConfirmations;
   int get oneWayExitConfirmations => _oneWayExitConfirmations;
   bool get filterStaleGpsFixes => _filterStaleGpsFixes;
@@ -108,6 +117,9 @@ class SettingsService extends ChangeNotifier {
   bool get audioDucking => _audioDucking;
   bool get lookaheadAlerts => _lookaheadAlerts;
   double get lookaheadDistanceMeters => _lookaheadDistanceMeters;
+  bool get lookaheadTrafficLights => _lookaheadTrafficLights;
+  bool get lookaheadGiveWay => _lookaheadGiveWay;
+  bool get lookaheadIntersections => _lookaheadIntersections;
   bool get trafficCalmingAlerts => _trafficCalmingAlerts;
   bool get speedCameraAlerts => _speedCameraAlerts;
   String? get ttsEngine => _ttsEngine;
@@ -153,8 +165,9 @@ class SettingsService extends ChangeNotifier {
     _recordAlertLogs = prefs.getBool(_keyRecordAlertLogs) ?? false;
     _roadSearchRadiusMeters = (prefs.getDouble(_keyRoadSearchRadiusMeters) ?? 40.0).clamp(10.0, 150.0);
     _courtyardSearchRadiusMeters = (prefs.getDouble(_keyCourtyardSearchRadiusMeters) ?? 15.0).clamp(5.0, 40.0);
-    _streetChangeDistanceMeters = (prefs.getDouble(_keyStreetChangeDistanceMeters) ?? 35.0).clamp(15.0, 100.0);
-    _streetChangeConfirmations = (prefs.getInt(_keyStreetChangeConfirmations) ?? 4).clamp(1, 10);
+    _streetChangeDistanceMeters = (prefs.getDouble(_keyStreetChangeDistanceMeters) ?? 20.0).clamp(10.0, 100.0);
+    _streetChangeConfirmations = (prefs.getInt(_keyStreetChangeConfirmations) ?? 3).clamp(1, 10);
+    _enableSpeedAdaptiveDistance = prefs.getBool(_keyEnableSpeedAdaptiveDistance) ?? true;
     _speedRestorationConfirmations = (prefs.getInt(_keySpeedRestorationConfirmations) ?? 4).clamp(1, 10);
     _oneWayExitConfirmations = (prefs.getInt(_keyOneWayExitConfirmations) ?? 3).clamp(1, 10);
     _filterStaleGpsFixes = prefs.getBool(_keyFilterStaleGpsFixes) ?? true;
@@ -163,6 +176,9 @@ class SettingsService extends ChangeNotifier {
     _audioDucking = prefs.getBool(_keyAudioDucking) ?? true;
     _lookaheadAlerts = prefs.getBool(_keyLookaheadAlerts) ?? true;
     _lookaheadDistanceMeters = (prefs.getDouble(_keyLookaheadDistanceMeters) ?? 70.0).clamp(30.0, 150.0);
+    _lookaheadTrafficLights = prefs.getBool(_keyLookaheadTrafficLights) ?? true;
+    _lookaheadGiveWay = prefs.getBool(_keyLookaheadGiveWay) ?? true;
+    _lookaheadIntersections = prefs.getBool(_keyLookaheadIntersections) ?? true;
     _trafficCalmingAlerts = prefs.getBool(_keyTrafficCalmingAlerts) ?? true;
     _speedCameraAlerts = prefs.getBool(_keySpeedCameraAlerts) ?? true;
     _ttsEngine = prefs.getString(_keyTtsEngine);
@@ -321,7 +337,7 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setStreetChangeDistanceMeters(double value) async {
-    _streetChangeDistanceMeters = value.clamp(15.0, 100.0);
+    _streetChangeDistanceMeters = value.clamp(10.0, 100.0);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_keyStreetChangeDistanceMeters, _streetChangeDistanceMeters);
     notifyListeners();
@@ -331,6 +347,13 @@ class SettingsService extends ChangeNotifier {
     _streetChangeConfirmations = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyStreetChangeConfirmations, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableSpeedAdaptiveDistance(bool value) async {
+    _enableSpeedAdaptiveDistance = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEnableSpeedAdaptiveDistance, value);
     notifyListeners();
   }
 
@@ -390,6 +413,27 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLookaheadTrafficLights(bool value) async {
+    _lookaheadTrafficLights = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyLookaheadTrafficLights, value);
+    notifyListeners();
+  }
+
+  Future<void> setLookaheadGiveWay(bool value) async {
+    _lookaheadGiveWay = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyLookaheadGiveWay, value);
+    notifyListeners();
+  }
+
+  Future<void> setLookaheadIntersections(bool value) async {
+    _lookaheadIntersections = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyLookaheadIntersections, value);
+    notifyListeners();
+  }
+
   Future<void> setTrafficCalmingAlerts(bool value) async {
     _trafficCalmingAlerts = value;
     final prefs = await SharedPreferences.getInstance();
@@ -424,6 +468,7 @@ class SettingsService extends ChangeNotifier {
       _keyCourtyardSearchRadiusMeters: _courtyardSearchRadiusMeters,
       _keyStreetChangeDistanceMeters: _streetChangeDistanceMeters,
       _keyStreetChangeConfirmations: _streetChangeConfirmations,
+      _keyEnableSpeedAdaptiveDistance: _enableSpeedAdaptiveDistance,
       _keySpeedRestorationConfirmations: _speedRestorationConfirmations,
       _keyOneWayExitConfirmations: _oneWayExitConfirmations,
       _keyFilterStaleGpsFixes: _filterStaleGpsFixes,
@@ -432,6 +477,9 @@ class SettingsService extends ChangeNotifier {
       _keyAudioDucking: _audioDucking,
       _keyLookaheadAlerts: _lookaheadAlerts,
       _keyLookaheadDistanceMeters: _lookaheadDistanceMeters,
+      _keyLookaheadTrafficLights: _lookaheadTrafficLights,
+      _keyLookaheadGiveWay: _lookaheadGiveWay,
+      _keyLookaheadIntersections: _lookaheadIntersections,
       _keyTrafficCalmingAlerts: _trafficCalmingAlerts,
       _keySpeedCameraAlerts: _speedCameraAlerts,
       _keyTtsEngine: _ttsEngine,
@@ -530,6 +578,10 @@ class SettingsService extends ChangeNotifier {
         _streetChangeConfirmations = (map[_keyStreetChangeConfirmations] as num).toInt();
         await prefs.setInt(_keyStreetChangeConfirmations, _streetChangeConfirmations);
       }
+      if (map.containsKey(_keyEnableSpeedAdaptiveDistance)) {
+        _enableSpeedAdaptiveDistance = map[_keyEnableSpeedAdaptiveDistance] == true;
+        await prefs.setBool(_keyEnableSpeedAdaptiveDistance, _enableSpeedAdaptiveDistance);
+      }
       if (map.containsKey(_keySpeedRestorationConfirmations)) {
         _speedRestorationConfirmations = (map[_keySpeedRestorationConfirmations] as num).toInt();
         await prefs.setInt(_keySpeedRestorationConfirmations, _speedRestorationConfirmations);
@@ -561,6 +613,18 @@ class SettingsService extends ChangeNotifier {
       if (map.containsKey(_keyLookaheadDistanceMeters)) {
         _lookaheadDistanceMeters = (map[_keyLookaheadDistanceMeters] as num).toDouble();
         await prefs.setDouble(_keyLookaheadDistanceMeters, _lookaheadDistanceMeters);
+      }
+      if (map.containsKey(_keyLookaheadTrafficLights)) {
+        _lookaheadTrafficLights = map[_keyLookaheadTrafficLights] == true;
+        await prefs.setBool(_keyLookaheadTrafficLights, _lookaheadTrafficLights);
+      }
+      if (map.containsKey(_keyLookaheadGiveWay)) {
+        _lookaheadGiveWay = map[_keyLookaheadGiveWay] == true;
+        await prefs.setBool(_keyLookaheadGiveWay, _lookaheadGiveWay);
+      }
+      if (map.containsKey(_keyLookaheadIntersections)) {
+        _lookaheadIntersections = map[_keyLookaheadIntersections] == true;
+        await prefs.setBool(_keyLookaheadIntersections, _lookaheadIntersections);
       }
       if (map.containsKey(_keyTrafficCalmingAlerts)) {
         _trafficCalmingAlerts = map[_keyTrafficCalmingAlerts] == true;

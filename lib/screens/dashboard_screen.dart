@@ -1957,6 +1957,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         badgeLabel = 'FOTORADARS';
         alertIcon = Icons.camera_alt_rounded;
         break;
+      case VoiceAlertType.trafficLightAhead:
+        badgeColor = Colors.lightGreenAccent;
+        badgeLabel = 'LUKSOFORS';
+        alertIcon = Icons.traffic_rounded;
+        break;
+      case VoiceAlertType.giveWayAhead:
+        badgeColor = Colors.deepOrangeAccent;
+        badgeLabel = 'DOD CEĻU';
+        alertIcon = Icons.warning_amber_rounded;
+        break;
+      case VoiceAlertType.mainRoadReminder:
+        badgeColor = Colors.yellowAccent;
+        badgeLabel = 'GALVENAIS CEĻŠ';
+        alertIcon = Icons.navigation_rounded;
+        break;
+      case VoiceAlertType.equalIntersectionAhead:
+        badgeColor = Colors.amberAccent;
+        badgeLabel = 'VIENĀDAS NOZĪMES';
+        alertIcon = Icons.call_split_rounded;
+        break;
+      case VoiceAlertType.mainRoadTurns:
+        badgeColor = Colors.yellowAccent;
+        badgeLabel = 'GALVENAIS CEĻŠ NOGRIEŽAS';
+        alertIcon = Icons.turn_right_rounded;
+        break;
     }
 
 
