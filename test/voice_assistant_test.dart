@@ -2052,4 +2052,136 @@ void main() {
       expect(sm.currentStreetName, equals('Saules iela'));
     });
   });
+
+  group('Real Drive Fixes & Speed Restoration Tests', () {
+    test('Immediate 30 km/h speed restoration: returns to 50 km/h on the very first point with 0 delay', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialStreetName: 'Kuldīgas iela',
+        announceStreetChanges: true,
+        useDynamicPhrases: true,
+        alertStyle: VoiceAlertStyle.concise,
+      );
+
+      // Enter 30 km/h section on Kuldīgas iela
+      final enterEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 28.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now(),
+        ),
+      );
+      expect(enterEvents.any((e) => e.type == VoiceAlertType.speedReduced), isTrue);
+      expect(sm.isInReducedSpeedZone, isTrue);
+
+      // Immediately upon reaching 50 km/h on the very first point past intersection/sign:
+      final restoreEvents = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39550,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 38.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          timestamp: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+      );
+
+      final restored = restoreEvents.where((e) => e.type == VoiceAlertType.speedRestored).toList();
+      expect(restored.length, equals(1), reason: 'Must restore speed limit on the very first 50 km/h point');
+      expect(restored.first.spokenText, equals('Ātruma ierobežojums ir beidzies. Kuldīgas iela.'));
+      expect(sm.isInReducedSpeedZone, isFalse);
+      expect(sm.currentMaxSpeed, equals(50));
+    });
+
+    test('Lookahead speed restoration warning: alerts upcoming end of 30 limit', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialStreetName: 'Lielais prospekts',
+      );
+
+      // Vehicle is in 30 km/h reduced zone
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39000,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 28.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      // Lookahead detects 50 km/h 70m ahead
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39050,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 29.0,
+          maxSpeedLimitKmh: 30,
+          isOneWay: false,
+          lookaheadMaxSpeed: 50,
+          lookaheadDistanceMeters: 70.0,
+          streetName: 'Lielais prospekts',
+          timestamp: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+        lookaheadAlertsEnabled: true,
+      );
+
+      final lookaheadRestore = events.where((e) => e.type == VoiceAlertType.lookaheadSpeedRestored).toList();
+      expect(lookaheadRestore.length, equals(1));
+      expect(lookaheadRestore.first.spokenText, contains('ātruma ierobežojums beidzas'));
+    });
+
+    test('Cross-street spike protection: driving straight at 45 km/h does not trigger false one-way', () {
+      final sm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialStreetName: 'Kuldīgas iela',
+        initialIsOneWay: false,
+      );
+
+      // Establish straight trajectory North on Kuldīgas iela
+      sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39400,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Kuldīgas iela',
+          heading: 0.0,
+          timestamp: DateTime.now().subtract(const Duration(seconds: 1)),
+        ),
+      );
+
+      // A brief perpendicular GPS cross-street candidate appears while maintaining straight trajectory at 45 km/h
+      final events = sm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.39500,
+          longitude: 21.56000,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: true, // Cross-street is one-way
+          streetName: 'Maiznieku iela', // Cross street
+          heading: 0.0, // Trajectory is still straight North!
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      expect(events.where((e) => e.type == VoiceAlertType.oneWayEntered), isEmpty,
+          reason: 'Perpendicular cross-street must not trigger one-way while driving straight');
+      expect(sm.isOneWay, isFalse);
+    });
+
+    test('A10 corridor aliasing: treating Dzintaru iela, Ventas tilts, and A10 as same corridor', () {
+      expect(VoiceAssistantStateMachine.areSameStreets('Dzintaru iela', 'Ventas tilts'), isTrue);
+      expect(VoiceAssistantStateMachine.areSameStreets('Ventas tilts', 'A10'), isTrue);
+      expect(VoiceAssistantStateMachine.areSameStreets('A10', 'Dzintaru iela'), isTrue);
+    });
+  });
 }

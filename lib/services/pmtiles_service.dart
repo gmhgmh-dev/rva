@@ -231,7 +231,35 @@ class PMTilesService {
           }
 
           final fName = (props['name'] ?? props['name:lv'] ?? props['name:latin'])?.value.toString().trim().toLowerCase();
-          final isCurrentRoad = normalizedCurrentRoad != null && fName != null && fName == normalizedCurrentRoad;
+          final fRef = props['ref']?.value?.toString().trim().toLowerCase();
+          final fClass = (props['class'] ?? props['highway'])?.value?.toString().trim().toLowerCase() ?? '';
+
+          // Match current road or known corridor aliases (e.g. A10, Dzintaru iela, Ventas tilts)
+          bool isCurrentRoad = false;
+          if (normalizedCurrentRoad != null) {
+            if (fName != null && fName == normalizedCurrentRoad) {
+              isCurrentRoad = true;
+            } else if (fRef != null && fRef == normalizedCurrentRoad) {
+              isCurrentRoad = true;
+            } else if ((normalizedCurrentRoad == 'dzintaru iela' || normalizedCurrentRoad == 'ventas tilts') &&
+                (fRef == 'a10' || fName == 'ventas tilts' || fName == 'dzintaru iela')) {
+              isCurrentRoad = true;
+            } else if (normalizedCurrentRoad == 'a10' &&
+                (fName == 'dzintaru iela' || fName == 'ventas tilts')) {
+              isCurrentRoad = true;
+            }
+          }
+
+          // Hierarchy inertia: If moving at >= 25 km/h on an established main road,
+          // heavily penalize minor parallel roads (residential, service, living_street, unclassified)
+          // to prevent ping-pong with side streets or courtyards.
+          double hierarchyPenalty = 1.0;
+          if (!isCurrentRoad && vehicleSpeedKmh != null && vehicleSpeedKmh >= 25.0 && normalizedCurrentRoad != null) {
+            final isCandidateMinor = (fClass == 'residential' || fClass == 'service' || fClass == 'living_street' || fClass == 'unclassified');
+            if (isCandidateMinor) {
+              hierarchyPenalty = 10.0;
+            }
+          }
 
           // Sticky bias at intersections: if this feature is the current road,
           // give it strong affinity advantage to avoid flickering to perpendicular cross-streets.
@@ -239,7 +267,7 @@ class PMTilesService {
           if (isCurrentRoad) {
             effectiveDistSq = featureMinDistSq * 0.15; // Strong current road affinity
           } else {
-            effectiveDistSq = featureMinDistSq * headingPenalty;
+            effectiveDistSq = featureMinDistSq * headingPenalty * hierarchyPenalty;
           }
 
           if (hasName && effectiveDistSq < minNamedDistanceSq) {

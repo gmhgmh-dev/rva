@@ -38,6 +38,7 @@ class RealLocationService {
 
   double roadSearchRadiusMeters = 40.0;
   double courtyardSearchRadiusMeters = 15.0;
+  double? customLookaheadDistance;
   String? currentRoadName;
   bool filterStaleGpsFixes = true;
   int staleGpsTimeoutSeconds = 5;
@@ -202,7 +203,7 @@ class RealLocationService {
           RoadAttributes? lookaheadAttrs;
           double? lookaheadDist;
           if (heading != null && speedKmh >= 8.0) {
-            lookaheadDist = PMTilesService.calculateDynamicLookaheadDistance(speedKmh);
+            lookaheadDist = customLookaheadDistance ?? PMTilesService.calculateDynamicLookaheadDistance(speedKmh);
             try {
               lookaheadAttrs = await pmTilesService!.getLookaheadRoadAttributes(
                 lat,
@@ -234,6 +235,7 @@ class RealLocationService {
                  lon,
                  heading: heading,
                  speedKmh: speedKmh,
+                 customLookaheadDistance: lookaheadDist,
                  currentRoadName: currentRoadName,
                );
              } catch (_) {}

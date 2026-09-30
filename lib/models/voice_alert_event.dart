@@ -53,6 +53,9 @@ enum VoiceAlertType {
 
   /// Trigger 18: Lookahead main road turns warning
   mainRoadTurns,
+
+  /// Trigger 19: Lookahead speed restriction end warning (e.g. 30 -> 50)
+  lookaheadSpeedRestored,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

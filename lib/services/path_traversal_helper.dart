@@ -85,6 +85,24 @@ class PathTraversalHelper {
       }
     }
 
+    // Ensure the path extends forward at least maxDistanceMeters along the road heading
+    // so we don't prematurely stop at OSM way segment boundaries before reaching intersections!
+    double existingPathPixelsLength = 0.0;
+    for (var i = 0; i < pathPixels.length - 1; i++) {
+      final dx = pathPixels[i + 1][0] - pathPixels[i][0];
+      final dy = pathPixels[i + 1][1] - pathPixels[i][1];
+      existingPathPixelsLength += sqrt(dx * dx + dy * dy);
+    }
+    final existingMeters = existingPathPixelsLength * metersPerPixel;
+    if (existingMeters < maxDistanceMeters && pathPixels.isNotEmpty) {
+      final remainingMeters = maxDistanceMeters - existingMeters;
+      final remainingPixels = remainingMeters / metersPerPixel;
+      final headingRad = heading * pi / 180.0;
+      final projX = pathPixels.last[0] + (sin(headingRad) * remainingPixels).round();
+      final projY = pathPixels.last[1] - (cos(headingRad) * remainingPixels).round();
+      pathPixels.add([projX, projY]);
+    }
+
     // 3. Walk the path, accumulating distance, and checking for POIs/intersections near each segment
     double accumulatedDistanceMeters = 0.0;
     
@@ -195,9 +213,11 @@ class PathTraversalHelper {
         if (intersects) {
           final interClass = road['class'] as String;
           // Logic for intersection types
-          final isCurrentMain = (currentClass == 'primary' || currentClass == 'secondary' || currentClass == 'tertiary');
+          final isCurrentMain = (currentClass == 'primary' || currentClass == 'secondary' || currentClass == 'tertiary' || currentClass == 'trunk');
           final isInterMinor = (interClass == 'residential' || interClass == 'unclassified' || interClass == 'service');
-          
+          final isCurrentMinor = (currentClass == 'residential' || currentClass == 'unclassified' || currentClass == 'service' || currentClass == 'living_street');
+          final isInterMain = (interClass == 'primary' || interClass == 'secondary' || interClass == 'trunk');
+
           if (isCurrentMain && isInterMinor) {
             events.add(LookaheadEvent(
               type: LookaheadEventType.mainRoadReminder,
@@ -205,7 +225,15 @@ class PathTraversalHelper {
               latitude: currentLat,
               longitude: currentLon,
             ));
-          } else if (currentClass == interClass && currentClass != 'service') {
+          } else if (isCurrentMinor && isInterMain) {
+            // Minor road entering a main road: must give way!
+            events.add(LookaheadEvent(
+              type: LookaheadEventType.giveWay,
+              distanceMeters: accumulatedDistanceMeters + (segLengthMeters * 0.5),
+              latitude: currentLat,
+              longitude: currentLon,
+            ));
+          } else if (currentClass == interClass && currentClass != 'service' && currentClass.isNotEmpty) {
              events.add(LookaheadEvent(
               type: LookaheadEventType.equalIntersection,
               distanceMeters: accumulatedDistanceMeters + (segLengthMeters * 0.5),
@@ -353,8 +381,16 @@ class PathTraversalHelper {
   static bool _segmentsIntersect(double p0x, double p0y, double p1x, double p1y, double p2x, double p2y, double p3x, double p3y) {
     final s1x = p1x - p0x; final s1y = p1y - p0y;
     final s2x = p3x - p2x; final s2y = p3y - p2y;
-    final s = (-s1y * (p0x - p2x) + s1x * (p0y - p2y)) / (-s2x * s1y + s1x * s2y);
-    final t = ( s2x * (p0y - p2y) - s2y * (p0x - p2x)) / (-s2x * s1y + s1x * s2y);
-    return (s >= 0 && s <= 1 && t >= 0 && t <= 1);
+    final denom = (-s2x * s1y + s1x * s2y);
+    if (denom.abs() < 1e-9) {
+      return _pointToSegmentDistanceSq(p2x, p2y, p0x, p0y, p1x, p1y) < 16.0 ||
+             _pointToSegmentDistanceSq(p3x, p3y, p0x, p0y, p1x, p1y) < 16.0;
+    }
+    final s = (-s1y * (p0x - p2x) + s1x * (p0y - p2y)) / denom;
+    final t = ( s2x * (p0y - p2y) - s2y * (p0x - p2x)) / denom;
+    if (s >= -0.05 && s <= 1.05 && t >= -0.05 && t <= 1.05) return true;
+    if (_pointToSegmentDistanceSq(p2x, p2y, p0x, p0y, p1x, p1y) < 16.0) return true;
+    if (_pointToSegmentDistanceSq(p3x, p3y, p0x, p0y, p1x, p1y) < 16.0) return true;
+    return false;
   }
 }

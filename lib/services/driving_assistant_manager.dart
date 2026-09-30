@@ -76,6 +76,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     
     realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
     realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.customLookaheadDistance = settingsService.lookaheadDistanceMeters;
     realLocationService.filterStaleGpsFixes = settingsService.filterStaleGpsFixes;
     realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
     realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
@@ -240,6 +241,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     // Apply latest user-configured search radii and filters
     realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
     realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.customLookaheadDistance = settingsService.lookaheadDistanceMeters;
     realLocationService.filterStaleGpsFixes = settingsService.filterStaleGpsFixes;
     realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
     realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
@@ -283,6 +285,7 @@ class DrivingAssistantManager extends ChangeNotifier {
     // Keep real location service settings in sync with current street & radius preferences
     realLocationService.roadSearchRadiusMeters = settingsService.roadSearchRadiusMeters;
     realLocationService.courtyardSearchRadiusMeters = settingsService.courtyardSearchRadiusMeters;
+    realLocationService.customLookaheadDistance = settingsService.lookaheadDistanceMeters;
     realLocationService.filterStaleGpsFixes = settingsService.filterStaleGpsFixes;
     realLocationService.staleGpsTimeoutSeconds = settingsService.staleGpsTimeoutSeconds;
     realLocationService.prioritizePedestrianAndCycleways = settingsService.prioritizePedestrianAndCycleways;
@@ -323,6 +326,7 @@ class DrivingAssistantManager extends ChangeNotifier {
             point.longitude,
             heading: point.heading!,
             speedKmh: point.vehicleSpeedKmh,
+            customLookaheadDistance: settingsService.lookaheadDistanceMeters,
             currentRoadName: stateMachine.currentStreetName,
           );
           if (lookaheadEvents.isNotEmpty) {

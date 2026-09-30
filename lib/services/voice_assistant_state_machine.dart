@@ -37,6 +37,7 @@ class VoiceAssistantStateMachine {
   double? _lastCandidateLon;
   int _pendingSpeedRestorationConfirmations = 0;
   int _pendingOneWayExitConfirmations = 0;
+  int _pendingLivingStreetConfirmations = 0;
   int? _lastLookaheadAlertedLimit;
   DateTime? _lastTrafficCalmingAlertTime;
   DateTime? _lastSpeedCameraAlertTime;
@@ -110,6 +111,7 @@ class VoiceAssistantStateMachine {
     _lastCandidateLon = null;
     _pendingSpeedRestorationConfirmations = 0;
     _pendingOneWayExitConfirmations = 0;
+    _pendingLivingStreetConfirmations = 0;
     _lastLookaheadAlertedLimit = null;
     _lastTrafficCalmingAlertTime = null;
     _lastSpeedCameraAlertTime = null;
@@ -141,7 +143,17 @@ class VoiceAssistantStateMachine {
     final s1 = cleanStreetName(street1);
     final s2 = cleanStreetName(street2);
     if (s1 != null && s2 != null) {
-      return s1.toLowerCase() == s2.toLowerCase();
+      final l1 = s1.toLowerCase();
+      final l2 = s2.toLowerCase();
+      if (l1 == l2) return true;
+      // Highway corridor aliases in Latvia / Ventspils:
+      // A10 corridor includes "Dzintaru iela", "Ventas tilts", "A10"
+      final isA10Corridor_1 = l1.contains('dzintaru') || l1.contains('ventas tilts') || l1 == 'a10' || l1.startsWith('a10');
+      final isA10Corridor_2 = l2.contains('dzintaru') || l2.contains('ventas tilts') || l2 == 'a10' || l2.startsWith('a10');
+      if (isA10Corridor_1 && isA10Corridor_2) {
+        return true;
+      }
+      return false;
     }
     // If one or both are generic / unnamed, compare raw trimmed strings
     return street1?.trim().toLowerCase() == street2?.trim().toLowerCase();
@@ -509,9 +521,20 @@ class VoiceAssistantStateMachine {
     final String? previousStreetName = _currentStreetName;
 
     // Determine if road is living street (20 km/h)
-    final isLiving = (roadClass?.toLowerCase() == 'living_street') ||
+    final bool rawIsLiving = (roadClass?.toLowerCase() == 'living_street') ||
         (newMaxSpeed == 20 && !isCycleway && !isFootway && !isPath) ||
         (streetName?.toLowerCase() == 'dzīvojamā zona');
+
+    final bool onEstablishedNamedRoad = _currentStreetName != null &&
+        _currentStreetName != 'Pilsētas ceļš' &&
+        _currentStreetName != 'Pagalma brauktuve' &&
+        _currentStreetName != 'Dzīvojamā zona';
+
+    bool isLiving = rawIsLiving;
+    if (rawIsLiving && onEstablishedNamedRoad && vehicleSpeedKmh != null && vehicleSpeedKmh >= 22.0) {
+      // Speed is too high for a living street; ignore courtyard GPS leak while moving along a main street
+      isLiving = false;
+    }
 
     final effectiveSpeed = isLiving ? 20 : newMaxSpeed;
 
@@ -567,40 +590,50 @@ class VoiceAssistantStateMachine {
     // 1. DZĪVOJAMĀS ZONAS STĀVOKLIS (20 km/h)
     if (isLiving) {
       if (!_isInLivingStreetZone) {
-        _isInLivingStreetZone = true;
-        _isInReducedSpeedZone = true;
-        _isIn30SpeedZone = false;
-        _currentMaxSpeed = 20;
-        if (normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
-          _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
+        _pendingLivingStreetConfirmations++;
+        final requiredConfirmations = onEstablishedNamedRoad ? 2 : 1;
+        if (_pendingLivingStreetConfirmations >= requiredConfirmations) {
+          _isInLivingStreetZone = true;
+          _isInReducedSpeedZone = true;
+          _isIn30SpeedZone = false;
+          _currentMaxSpeed = 20;
+          _pendingLivingStreetConfirmations = 0;
+          if (normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
+            _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
+          }
+          events.add(
+            VoiceAlertEvent(
+              type: VoiceAlertType.livingStreetEntered,
+              spokenText: formatLivingStreetAnnouncement(),
+              timestamp: now,
+              speedLimitKmh: 20,
+              isOneWay: newIsOneWay ?? _isOneWay,
+              streetName: streetName ?? _currentStreetName,
+            ),
+          );
         }
-        events.add(
-          VoiceAlertEvent(
-            type: VoiceAlertType.livingStreetEntered,
-            spokenText: formatLivingStreetAnnouncement(),
-            timestamp: now,
-            speedLimitKmh: 20,
-            isOneWay: newIsOneWay ?? _isOneWay,
-            streetName: streetName ?? _currentStreetName,
-          ),
-        );
+      } else {
+        _pendingLivingStreetConfirmations = 0;
       }
-    } else if (_isInLivingStreetZone) {
-      // Exited living street zone
-      _isInLivingStreetZone = false;
-      if (effectiveSpeed != null && effectiveSpeed >= 50) {
-        _isInReducedSpeedZone = false;
-        _currentMaxSpeed = effectiveSpeed;
-        events.add(
-          VoiceAlertEvent(
-            type: VoiceAlertType.speedZoneEnded,
-            spokenText: 'Atruma ierobežojuma zona ir beigusies.',
-            timestamp: now,
-            speedLimitKmh: effectiveSpeed,
-            isOneWay: _isOneWay,
-            streetName: streetName,
-          ),
-        );
+    } else {
+      _pendingLivingStreetConfirmations = 0;
+      if (_isInLivingStreetZone) {
+        // Exited living street zone
+        _isInLivingStreetZone = false;
+        if (effectiveSpeed != null && effectiveSpeed >= 50) {
+          _isInReducedSpeedZone = false;
+          _currentMaxSpeed = effectiveSpeed;
+          events.add(
+            VoiceAlertEvent(
+              type: VoiceAlertType.speedZoneEnded,
+              spokenText: 'Atruma ierobežojuma zona ir beigusies.',
+              timestamp: now,
+              speedLimitKmh: effectiveSpeed,
+              isOneWay: _isOneWay,
+              streetName: streetName,
+            ),
+          );
+        }
       }
     }
 
@@ -729,66 +762,73 @@ class VoiceAssistantStateMachine {
     // Standstill protection: do not toggle one-way state when stopped at a red light or intersection (< 3.5 km/h)
     if (newIsOneWay != null && (isMoving || _currentStreetName == null)) {
       if (!_isOneWay && newIsOneWay) {
-        // TRIGERIS 3: Ja auto no divvirzienu ielas iebrauc vienvirziena ielā (oneway == true)
-        _isOneWay = true;
-        _pendingOneWayExitConfirmations = 0;
-
         final isSame = (previousStreetName == null) || (streetName == null) || areSameStreets(previousStreetName, streetName);
-        if (useDynamicPhrases) {
-          // Smart Fusion: Check if speedReduced was just emitted in Section 2 for this point
-          final speedReducedIdx = events.indexWhere((e) => e.type == VoiceAlertType.speedReduced);
-          int? fusedSpeed;
-          if (speedReducedIdx != -1) {
-            fusedSpeed = events[speedReducedIdx].speedLimitKmh;
-            events.removeAt(speedReducedIdx); // Fused into one-way announcement!
-          } else if (effectiveSpeed != null && effectiveSpeed < 50) {
-            fusedSpeed = effectiveSpeed;
+
+        // Cross-street spike protection:
+        // When driving straight at road speed (>= 22 km/h) on an established named road,
+        // and vehicle trajectory continues straight along current street heading (diff < 25 deg),
+        // do not let a brief perpendicular cross-street candidate trigger oneWayEntered!
+        bool isCrossStreetSpike = false;
+        if (!isSame && _currentStreetName != null && vehicleSpeedKmh != null && vehicleSpeedKmh >= 22.0) {
+          if (heading != null && _currentStreetHeading != null) {
+            double diff = (heading - _currentStreetHeading!).abs() % 180.0;
+            if (diff > 90.0) diff = 180.0 - diff;
+            if (diff < 25.0) {
+              isCrossStreetSpike = true;
+            }
           }
+        }
 
-          // Check if speed restriction ended upon turning into this one-way street
-          final wasInSpeedRestricted = (_isInReducedSpeedZone || _isIn30SpeedZone);
-          final bool speedEndedOnTurn = !isSame && wasInSpeedRestricted && (effectiveSpeed ?? 50) >= 50;
-          if (speedEndedOnTurn) {
-            _isInReducedSpeedZone = false;
-            _isIn30SpeedZone = false;
-            _pendingSpeedRestorationConfirmations = 0;
-            _currentMaxSpeed = effectiveSpeed ?? 50;
-          }
+        if (!isCrossStreetSpike) {
+          // TRIGERIS 3: Ja auto no divvirzienu ielas iebrauc vienvirziena ielā (oneway == true)
+          _isOneWay = true;
+          _pendingOneWayExitConfirmations = 0;
 
-          final spoken = formatOneWayAnnouncement(
-            streetName: streetName,
-            isSameStreet: isSame,
-            maxSpeed: fusedSpeed,
-            speedRestored: speedEndedOnTurn,
-            style: alertStyle,
-          );
+          if (useDynamicPhrases) {
+            // Smart Fusion: Check if speedReduced was just emitted in Section 2 for this point
+            final speedReducedIdx = events.indexWhere((e) => e.type == VoiceAlertType.speedReduced);
+            int? fusedSpeed;
+            if (speedReducedIdx != -1) {
+              fusedSpeed = events[speedReducedIdx].speedLimitKmh;
+              events.removeAt(speedReducedIdx); // Fused into one-way announcement!
+            } else if (effectiveSpeed != null && effectiveSpeed < 50) {
+              fusedSpeed = effectiveSpeed;
+            }
 
-          if (!isSame && normalizedNewStreet != null && normalizedNewStreet.isNotEmpty) {
-            _lastAlertedStreetName = cleanStreetName(normalizedNewStreet);
-            _currentStreetName = normalizedNewStreet;
-          }
-
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.oneWayEntered,
-              spokenText: spoken,
-              timestamp: now,
-              speedLimitKmh: fusedSpeed ?? _currentMaxSpeed,
-              isOneWay: true,
+            final spoken = formatOneWayAnnouncement(
               streetName: streetName,
-            ),
-          );
-        } else {
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.oneWayEntered,
-              spokenText: 'Jūs atrodaties uz vienvirziena ielas.',
-              timestamp: now,
-              speedLimitKmh: _currentMaxSpeed,
-              isOneWay: true,
-              streetName: streetName,
-            ),
-          );
+              isSameStreet: isSame,
+              maxSpeed: fusedSpeed,
+              speedRestored: false,
+              style: alertStyle,
+            );
+
+            if (streetName != null) {
+              _lastAlertedStreetName = cleanStreetName(streetName);
+            }
+
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.oneWayEntered,
+                spokenText: spoken,
+                timestamp: now,
+                speedLimitKmh: fusedSpeed ?? _currentMaxSpeed,
+                isOneWay: true,
+                streetName: streetName,
+              ),
+            );
+          } else {
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.oneWayEntered,
+                spokenText: 'Jūs atrodaties uz vienvirziena ielas.',
+                timestamp: now,
+                speedLimitKmh: _currentMaxSpeed,
+                isOneWay: true,
+                streetName: streetName,
+              ),
+            );
+          }
         }
       } else if (_isOneWay && !newIsOneWay) {
         // TRIGERIS 4: Ja auto izbrauc no vienvirziena ielas atpakaļ divvirzienu ielā (oneway == false)
@@ -955,6 +995,11 @@ class VoiceAssistantStateMachine {
               _currentMaxSpeed = newLimit;
             }
 
+            // Sync one-way state for the newly confirmed street
+            final bool newlyConfirmedIsOneWay = (newIsOneWay == true);
+            _isOneWay = newlyConfirmedIsOneWay;
+            _pendingOneWayExitConfirmations = 0;
+
             if (announceStreetChanges) {
               final alreadyHasAlert = events.any((e) =>
                   e.type == VoiceAlertType.speed30ZoneEntered ||
@@ -988,6 +1033,15 @@ class VoiceAssistantStateMachine {
                       style: alertStyle,
                     );
                   }
+                } else if (newlyConfirmedIsOneWay && useDynamicPhrases) {
+                  // Smart Fusion: Confirmed turn onto a one-way street!
+                  spoken = formatOneWayAnnouncement(
+                    streetName: normalizedNewStreet,
+                    isSameStreet: false,
+                    maxSpeed: newLimit < 50 ? newLimit : null,
+                    speedRestored: false,
+                    style: alertStyle,
+                  );
                 } else {
                   spoken = useDynamicPhrases
                       ? formatStreetChangeAnnouncement(
@@ -1002,11 +1056,18 @@ class VoiceAssistantStateMachine {
                 }
 
                 if (spoken.isNotEmpty) {
+                  final VoiceAlertType eventType;
+                  if (isSpeedRestoredByTurn) {
+                    eventType = wasActualZone ? VoiceAlertType.speedZoneEnded : VoiceAlertType.speedRestored;
+                  } else if (newlyConfirmedIsOneWay) {
+                    eventType = VoiceAlertType.oneWayEntered;
+                  } else {
+                    eventType = VoiceAlertType.streetChanged;
+                  }
+
                   events.add(
                     VoiceAlertEvent(
-                      type: isSpeedRestoredByTurn
-                          ? (wasActualZone ? VoiceAlertType.speedZoneEnded : VoiceAlertType.speedRestored)
-                          : VoiceAlertType.streetChanged,
+                      type: eventType,
                       spokenText: spoken,
                       timestamp: now,
                       speedLimitKmh: newLimit,
@@ -1036,38 +1097,43 @@ class VoiceAssistantStateMachine {
 
     // 5. ĀTRUMA PĀRSNIEGŠANAS BRĪDINĀJUMS
     if (effectiveSpeed != null && vehicleSpeedKmh != null) {
-      final double calculatedTolerance = (toleranceMode == SpeedToleranceMode.percentage)
-          ? (effectiveSpeed * (speedTolerancePercentage / 100.0))
-          : speedTolerance.toDouble();
-      final speedLimitWithTolerance = effectiveSpeed + calculatedTolerance;
-      final isCurrentlySpeeding = vehicleSpeedKmh > speedLimitWithTolerance;
+      // Suppress speeding warning if current road is an established named road,
+      // but effectiveSpeed was temporarily lowered to 20 by an unconfirmed living street candidate
+      final bool isUnconfirmedSpeedDrop = onEstablishedNamedRoad && effectiveSpeed == 20 && !_isInLivingStreetZone;
+      if (!isUnconfirmedSpeedDrop) {
+        final double calculatedTolerance = (toleranceMode == SpeedToleranceMode.percentage)
+            ? (effectiveSpeed * (speedTolerancePercentage / 100.0))
+            : speedTolerance.toDouble();
+        final speedLimitWithTolerance = effectiveSpeed + calculatedTolerance;
+        final isCurrentlySpeeding = vehicleSpeedKmh > speedLimitWithTolerance;
 
-      if (isCurrentlySpeeding) {
-        final canWarnAgain = _lastSpeedingWarningTime == null ||
-            now.difference(_lastSpeedingWarningTime!).inSeconds >= speedWarningInterval;
+        if (isCurrentlySpeeding) {
+          final canWarnAgain = _lastSpeedingWarningTime == null ||
+              now.difference(_lastSpeedingWarningTime!).inSeconds >= speedWarningInterval;
 
-        if (!_isSpeeding || canWarnAgain) {
-          _isSpeeding = true;
-          _lastSpeedingWarningTime = now;
-          events.add(
-            VoiceAlertEvent(
-              type: VoiceAlertType.speedingWarning,
-              spokenText: 'Jūs pārsniedzat atļauto ātrumu.',
-              timestamp: now,
-              speedLimitKmh: effectiveSpeed,
-              isOneWay: _isOneWay,
-              streetName: streetName,
-            ),
-          );
+          if (!_isSpeeding || canWarnAgain) {
+            _isSpeeding = true;
+            _lastSpeedingWarningTime = now;
+            events.add(
+              VoiceAlertEvent(
+                type: VoiceAlertType.speedingWarning,
+                spokenText: 'Jūs pārsniedzat atļauto ātrumu.',
+                timestamp: now,
+                speedLimitKmh: effectiveSpeed,
+                isOneWay: _isOneWay,
+                streetName: streetName,
+              ),
+            );
+          }
+        } else {
+          _isSpeeding = false;
         }
-      } else {
-        _isSpeeding = false;
       }
     }
 
     // 6. APSTEIDZOŠIE BRĪDINĀJUMI (Lookahead)
     if (lookaheadAlertsEnabled && lookaheadMaxSpeed != null && effectiveSpeed != null) {
-      // Only alert if upcoming speed limit is LOWER than our current speed limit (e.g. 50 -> 30 or 50 -> 20)
+      // 6a. Upcoming speed limit reduction (e.g. 50 -> 30 or 50 -> 20)
       if (lookaheadMaxSpeed < effectiveSpeed && _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
         final dist = ((lookaheadDistanceMeters ?? 70.0) / 10.0).round() * 10;
         _lastLookaheadAlertedLimit = lookaheadMaxSpeed;
@@ -1075,6 +1141,22 @@ class VoiceAssistantStateMachine {
           VoiceAlertEvent(
             type: VoiceAlertType.lookaheadSpeedReduced,
             spokenText: formatLookaheadSpeedAnnouncement(lookaheadMaxSpeed, dist.clamp(30, 150)),
+            timestamp: now,
+            speedLimitKmh: lookaheadMaxSpeed,
+            isOneWay: newIsOneWay ?? _isOneWay,
+            streetName: streetName ?? _currentStreetName,
+          ),
+        );
+      }
+      // 6b. Upcoming speed limit end / restoration (e.g. 30 -> 50) on non-zone speed restrictions
+      else if (lookaheadMaxSpeed >= 50 && (_isInReducedSpeedZone && !_isIn30SpeedZone) && _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
+        final dist = ((lookaheadDistanceMeters ?? 70.0) / 10.0).round() * 10;
+        _lastLookaheadAlertedLimit = lookaheadMaxSpeed;
+        final spoken = 'Pēc ${dist.clamp(30, 150)} metriem ātruma ierobežojums beidzas.';
+        events.add(
+          VoiceAlertEvent(
+            type: VoiceAlertType.lookaheadSpeedRestored,
+            spokenText: spoken,
             timestamp: now,
             speedLimitKmh: lookaheadMaxSpeed,
             isOneWay: newIsOneWay ?? _isOneWay,

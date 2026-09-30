@@ -1982,6 +1982,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         badgeLabel = 'GALVENAIS CEĻŠ NOGRIEŽAS';
         alertIcon = Icons.turn_right_rounded;
         break;
+      case VoiceAlertType.lookaheadSpeedRestored:
+        badgeColor = Colors.greenAccent;
+        badgeLabel = 'IEROBEŽOJUMA BEIGAS';
+        alertIcon = Icons.speed_rounded;
+        break;
     }
 
 
