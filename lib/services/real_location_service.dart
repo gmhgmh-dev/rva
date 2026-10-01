@@ -214,6 +214,7 @@ class RealLocationService {
                 heading: heading,
                 speedKmh: speedKmh,
                 customLookaheadDistance: lookaheadDist,
+                currentRoadName: currentRoadName,
               );
             } catch (_) {}
           }
@@ -267,8 +268,12 @@ class RealLocationService {
             heading: heading,
             lookaheadMaxSpeed: lookaheadMaxSpeed,
             lookaheadDistanceMeters: lookaheadDist,
-            hasTrafficCalmingAhead: roadAttrs.hasTrafficCalming || (lookaheadAttrs?.hasTrafficCalming ?? false),
-            trafficCalmingAheadType: roadAttrs.trafficCalmingType ?? lookaheadAttrs?.trafficCalmingType,
+            hasTrafficCalmingAhead: roadAttrs.hasTrafficCalming ||
+                (lookaheadAttrs?.hasTrafficCalming ?? false) ||
+                lookaheadEvents.any((e) => e.type == LookaheadEventType.trafficCalming),
+            trafficCalmingAheadType: roadAttrs.trafficCalmingType ??
+                lookaheadAttrs?.trafficCalmingType ??
+                (lookaheadEvents.any((e) => e.type == LookaheadEventType.trafficCalming) ? 'bump' : null),
             hasSpeedCameraAhead: roadAttrs.hasSpeedCamera || (lookaheadAttrs?.hasSpeedCamera ?? false),
             speedCameraLimitAhead: roadAttrs.speedCameraLimit ?? lookaheadAttrs?.speedCameraLimit,
             lookaheadEvents: lookaheadEvents,

@@ -9,6 +9,7 @@ enum LookaheadEventType {
   speedLimitChange,
   trafficCalming,
   speedCamera,
+  pedestrianCrossing,
 }
 
 class LookaheadEvent {

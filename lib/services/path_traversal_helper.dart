@@ -319,6 +319,7 @@ class PathTraversalHelper {
       case LookaheadEventType.speedLimitChange:
       case LookaheadEventType.trafficCalming:
       case LookaheadEventType.speedCamera:
+      case LookaheadEventType.pedestrianCrossing:
         return false;
     }
   }
@@ -342,6 +343,8 @@ class PathTraversalHelper {
       case LookaheadEventType.speedLimitChange:
       case LookaheadEventType.trafficCalming:
         return 7;
+      case LookaheadEventType.pedestrianCrossing:
+        return 8;
     }
   }
 

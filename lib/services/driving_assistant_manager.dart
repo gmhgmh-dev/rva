@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/ventspils_traffic_nodes.dart';
+import '../models/lookahead_event.dart';
 import '../models/road_point.dart';
 import '../models/voice_alert_event.dart';
 import 'map_downloader_service.dart';
@@ -365,6 +366,8 @@ class DrivingAssistantManager extends ChangeNotifier {
             isCycleway: roadAttr.isCycleway,
             isFootway: roadAttr.isFootway,
             isPath: roadAttr.isPath,
+            hasTrafficCalmingAhead: roadAttr.hasTrafficCalming,
+            trafficCalmingAheadType: roadAttr.trafficCalmingType,
           );
         }
 
@@ -382,6 +385,7 @@ class DrivingAssistantManager extends ChangeNotifier {
             heading: point.heading!,
             speedKmh: point.vehicleSpeedKmh,
             customLookaheadDistance: lookaheadDist,
+            currentRoadName: roadAttr?.name ?? stateMachine.currentStreetName,
           );
           int? lookaheadMaxSpeed;
           if (lookaheadAttrs != null) {
@@ -407,13 +411,26 @@ class DrivingAssistantManager extends ChangeNotifier {
             lon: point.longitude,
             heading: point.heading!,
             lookaheadDist: lookaheadDist,
+            includeTrafficLights: settingsService.lookaheadTrafficLights,
+            includeGiveWay: settingsService.lookaheadGiveWay,
+            includeTrafficCalming: settingsService.trafficCalmingAlerts,
+            includePedestrianCrossings: settingsService.lookaheadPedestrianCrossings,
           );
           final allEvents = [...lookaheadEvents, ...offlineNodes];
+
+          final hasTrafficCalming = (roadAttr?.hasTrafficCalming ?? false) ||
+              (lookaheadAttrs?.hasTrafficCalming ?? false) ||
+              allEvents.any((n) => n.type == LookaheadEventType.trafficCalming);
+          final trafficCalmingType = roadAttr?.trafficCalmingType ??
+              lookaheadAttrs?.trafficCalmingType ??
+              (allEvents.any((n) => n.type == LookaheadEventType.trafficCalming) ? 'bump' : null);
 
           effectivePoint = effectivePoint.copyWith(
             lookaheadMaxSpeed: lookaheadMaxSpeed,
             lookaheadDistanceMeters: lookaheadDist,
             lookaheadEvents: allEvents,
+            hasTrafficCalmingAhead: hasTrafficCalming,
+            trafficCalmingAheadType: trafficCalmingType,
           );
         }
       } catch (e) {
@@ -444,6 +461,7 @@ class DrivingAssistantManager extends ChangeNotifier {
       lookaheadIntersections: settingsService.lookaheadIntersections,
       trafficCalmingAlertsEnabled: settingsService.trafficCalmingAlerts,
       speedCameraAlertsEnabled: settingsService.speedCameraAlerts,
+      lookaheadPedestrianCrossings: settingsService.lookaheadPedestrianCrossings,
       enableSpeedAdaptiveDistance: settingsService.enableSpeedAdaptiveDistance,
     );
 

@@ -39,8 +39,10 @@ class VoiceAssistantStateMachine {
   int _pendingOneWayExitConfirmations = 0;
   int _pendingLivingStreetConfirmations = 0;
   int? _lastLookaheadAlertedLimit;
+  DateTime? _lastLookaheadAlertTime;
   DateTime? _lastTrafficCalmingAlertTime;
   DateTime? _lastSpeedCameraAlertTime;
+  DateTime? _lastPedestrianCrossingAlertTime;
   String? _lastAlertedStreetName;
   double? _currentStreetHeading;
   DateTime? _lastStreetChangeAlertTime;
@@ -114,8 +116,10 @@ class VoiceAssistantStateMachine {
     _pendingOneWayExitConfirmations = 0;
     _pendingLivingStreetConfirmations = 0;
     _lastLookaheadAlertedLimit = null;
+    _lastLookaheadAlertTime = null;
     _lastTrafficCalmingAlertTime = null;
     _lastSpeedCameraAlertTime = null;
+    _lastPedestrianCrossingAlertTime = null;
     _lastAlertedStreetName = null;
     _currentStreetHeading = null;
     _lastStreetChangeAlertTime = null;
@@ -385,6 +389,16 @@ class VoiceAssistantStateMachine {
     return 'Uzmanību, priekšā ātrumvalnis.';
   }
 
+  /// Formats upcoming mid-block pedestrian crossing announcement:
+  /// - detailed: "Uzmanību, priekšā gājēju pāreja."
+  /// - concise: "Priekšā gājēju pāreja."
+  static String formatPedestrianCrossingAnnouncement({VoiceAlertStyle style = VoiceAlertStyle.concise}) {
+    if (style == VoiceAlertStyle.detailed) {
+      return 'Uzmanību, priekšā gājēju pāreja.';
+    }
+    return 'Priekšā gājēju pāreja.';
+  }
+
   /// Formats speed camera announcement:
   /// "Priekšā fotoradars, atļautais ātrums [maxSpeed]." or "Uzmanību, priekšā fotoradars."
   static String formatSpeedCameraAnnouncement([int? maxSpeed]) {
@@ -438,6 +452,7 @@ class VoiceAssistantStateMachine {
     bool lookaheadIntersections = true,
     bool trafficCalmingAlertsEnabled = false,
     bool speedCameraAlertsEnabled = false,
+    bool lookaheadPedestrianCrossings = true,
     bool enableSpeedAdaptiveDistance = false,
   }) {
     return processUpdate(
@@ -474,6 +489,7 @@ class VoiceAssistantStateMachine {
       lookaheadTrafficLights: lookaheadTrafficLights,
       lookaheadGiveWay: lookaheadGiveWay,
       lookaheadIntersections: lookaheadIntersections,
+      lookaheadPedestrianCrossings: lookaheadPedestrianCrossings,
       enableSpeedAdaptiveDistance: enableSpeedAdaptiveDistance,
       heading: point.heading,
     );
@@ -514,6 +530,7 @@ class VoiceAssistantStateMachine {
     bool hasSpeedCameraAhead = false,
     int? speedCameraLimitAhead,
     bool speedCameraAlertsEnabled = false,
+    bool lookaheadPedestrianCrossings = true,
     List<LookaheadEvent> lookaheadEvents = const [],
     bool enableSpeedAdaptiveDistance = false,
   }) {
@@ -1161,10 +1178,24 @@ class VoiceAssistantStateMachine {
 
     // 6. APSTEIDZOŠIE BRĪDINĀJUMI (Lookahead)
     if (lookaheadAlertsEnabled && lookaheadMaxSpeed != null && effectiveSpeed != null) {
-      // 6a. Upcoming speed limit reduction (e.g. 50 -> 30 or 50 -> 20)
-      if (lookaheadMaxSpeed < effectiveSpeed && _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
+      // Ignore phantom 20 km/h lookahead warnings when driving on normal roads (>= 30 km/h)
+      // unless vehicle is actually turning into a living street.
+      final bool isSpuriousLivingStreetLookahead = lookaheadMaxSpeed <= 20 &&
+          effectiveSpeed >= 30 &&
+          !_isInLivingStreetZone &&
+          !isLiving;
+
+      final bool canAlertLookaheadSpeed = _lastLookaheadAlertTime == null ||
+          now.difference(_lastLookaheadAlertTime!).inSeconds >= 20;
+
+      // 6a. Upcoming speed limit reduction (e.g. 50 -> 30)
+      if (!isSpuriousLivingStreetLookahead &&
+          lookaheadMaxSpeed < effectiveSpeed &&
+          canAlertLookaheadSpeed &&
+          _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
         final dist = ((lookaheadDistanceMeters ?? 70.0) / 10.0).round() * 10;
         _lastLookaheadAlertedLimit = lookaheadMaxSpeed;
+        _lastLookaheadAlertTime = now;
         events.add(
           VoiceAlertEvent(
             type: VoiceAlertType.lookaheadSpeedReduced,
@@ -1177,9 +1208,13 @@ class VoiceAssistantStateMachine {
         );
       }
       // 6b. Upcoming speed limit end / restoration (e.g. 30 -> 50) on non-zone speed restrictions
-      else if (lookaheadMaxSpeed >= 50 && (_isInReducedSpeedZone && !_isIn30SpeedZone) && _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
+      else if (lookaheadMaxSpeed >= 50 &&
+          (_isInReducedSpeedZone && !_isIn30SpeedZone) &&
+          canAlertLookaheadSpeed &&
+          _lastLookaheadAlertedLimit != lookaheadMaxSpeed) {
         final dist = ((lookaheadDistanceMeters ?? 70.0) / 10.0).round() * 10;
         _lastLookaheadAlertedLimit = lookaheadMaxSpeed;
+        _lastLookaheadAlertTime = now;
         final spoken = 'Pēc ${dist.clamp(30, 150)} metriem ātruma ierobežojums beidzas.';
         events.add(
           VoiceAlertEvent(
@@ -1195,14 +1230,16 @@ class VoiceAssistantStateMachine {
     }
 
     // Reset lookahead alert tracking when vehicle has transitioned to that speed
-    if (_lastLookaheadAlertedLimit != null && effectiveSpeed == _lastLookaheadAlertedLimit) {
+    if (_lastLookaheadAlertedLimit != null &&
+        effectiveSpeed == _lastLookaheadAlertedLimit &&
+        (_lastLookaheadAlertTime == null || now.difference(_lastLookaheadAlertTime!).inSeconds >= 10)) {
       _lastLookaheadAlertedLimit = null;
     }
 
     // 7. ĀTRUMVAĻŅI (Traffic Calming)
     if (trafficCalmingAlertsEnabled && hasTrafficCalmingAhead) {
       final shouldAlert = _lastTrafficCalmingAlertTime == null ||
-          now.difference(_lastTrafficCalmingAlertTime!).inSeconds >= 45;
+          now.difference(_lastTrafficCalmingAlertTime!).inSeconds >= 30;
       if (shouldAlert) {
         _lastTrafficCalmingAlertTime = now;
         events.add(
@@ -1294,6 +1331,24 @@ class VoiceAssistantStateMachine {
                   if (!lookaheadIntersections) continue;
                   spoken = formatMainRoadTurnsAnnouncement(false);
                   vType = VoiceAlertType.mainRoadTurns;
+                  break;
+              case LookaheadEventType.trafficCalming:
+                  if (!trafficCalmingAlertsEnabled) continue;
+                  if (_lastTrafficCalmingAlertTime != null && now.difference(_lastTrafficCalmingAlertTime!).inSeconds < 30) {
+                    continue;
+                  }
+                  spoken = formatTrafficCalmingAnnouncement();
+                  vType = VoiceAlertType.trafficCalmingAhead;
+                  _lastTrafficCalmingAlertTime = now;
+                  break;
+              case LookaheadEventType.pedestrianCrossing:
+                  if (!lookaheadPedestrianCrossings) continue;
+                  if (_lastPedestrianCrossingAlertTime != null && now.difference(_lastPedestrianCrossingAlertTime!).inSeconds < 25) {
+                    continue;
+                  }
+                  spoken = formatPedestrianCrossingAnnouncement(style: alertStyle);
+                  vType = VoiceAlertType.pedestrianCrossingAhead;
+                  _lastPedestrianCrossingAlertTime = now;
                   break;
               default:
                   continue; 

@@ -56,6 +56,9 @@ enum VoiceAlertType {
 
   /// Trigger 19: Lookahead speed restriction end warning (e.g. 30 -> 50)
   lookaheadSpeedRestored,
+
+  /// Trigger 20: Upcoming mid-block pedestrian crossing
+  pedestrianCrossingAhead,
 }
 
 /// Represents an alert event with the exact Latvian announcement text.

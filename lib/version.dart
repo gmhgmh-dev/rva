@@ -3,8 +3,8 @@
 /// Values can be overridden at build time via dart-define:
 /// flutter build apk --dart-define=GIT_HASH=abc1234 --dart-define=BUILD_NUMBER=4
 class AppVersion {
-  static const String versionName = '0.2.2';
-  static const String defaultBuildNumber = '6';
+  static const String versionName = '0.2.3';
+  static const String defaultBuildNumber = '7';
   static const String releaseChannel = 'stable';
 
   /// Compile-time passed build number or fallback to default.

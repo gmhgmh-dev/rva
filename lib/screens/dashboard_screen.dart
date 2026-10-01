@@ -1995,6 +1995,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         badgeLabel = 'IEROBEŽOJUMA BEIGAS';
         alertIcon = Icons.speed_rounded;
         break;
+      case VoiceAlertType.pedestrianCrossingAhead:
+        badgeColor = Colors.cyanAccent;
+        badgeLabel = 'GĀJĒJU PĀREJA';
+        alertIcon = Icons.directions_walk_rounded;
+        break;
     }
 
 

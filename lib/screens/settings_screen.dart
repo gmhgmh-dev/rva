@@ -676,10 +676,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (val) => settings.setLookaheadIntersections(val),
             ),
             _buildSwitch(
-              title: 'Ātrumvaļņu (traffic_calming) brīdinājumi',
-              subtitle: 'Paziņo par tuvošanos ātrumvaļņiem vai paaugstinātām pārejām no bezsaistes kartes.',
+              title: 'Ātrumvaļņu brīdinājumi',
+              subtitle: 'Savlaicīgi paziņo par tuvošanos ātrumvaļņiem vai paaugstinātām pārejām.',
               value: settings.trafficCalmingAlerts,
               onChanged: (val) => settings.setTrafficCalmingAlerts(val),
+            ),
+            _buildSwitch(
+              title: 'Gājēju pārejas taisnos posmos',
+              subtitle: 'Savlaicīgs brīdinājums par gājēju pārejām ārpus krustojumiem.',
+              value: settings.lookaheadPedestrianCrossings,
+              onChanged: (val) => settings.setLookaheadPedestrianCrossings(val),
             ),
             _buildSwitch(
               title: 'Fotoradaru brīdinājumi',

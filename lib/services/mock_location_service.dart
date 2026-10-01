@@ -285,6 +285,22 @@ class MockLocationService {
         );
       }
 
+      // Sort strictly by timestamp
+      list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      // Filter out duplicate or non-monotonic timestamps
+      final sanitizedList = <RoadPoint>[];
+      DateTime? lastTime;
+      for (final pt in list) {
+        if (lastTime != null && !pt.timestamp.isAfter(lastTime)) {
+          continue; // skip duplicate or retroactive timestamp glitch
+        }
+        sanitizedList.add(pt);
+        lastTime = pt.timestamp;
+      }
+      list.clear();
+      list.addAll(sanitizedList);
+
       // Compute heading between consecutive points
       for (var i = 0; i < list.length; i++) {
         if (i < list.length - 1) {

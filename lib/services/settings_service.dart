@@ -49,6 +49,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyLookaheadIntersections = 'lookahead_intersections';
   static const _keyTrafficCalmingAlerts = 'traffic_calming_alerts';
   static const _keySpeedCameraAlerts = 'speed_camera_alerts';
+  static const _keyLookaheadPedestrianCrossings = 'lookahead_pedestrian_crossings';
   static const _keyTtsEngine = 'tts_engine';
   static const _keyTtsVoiceName = 'tts_voice_name';
   static const _keyTtsVoiceLocale = 'tts_voice_locale';
@@ -92,6 +93,7 @@ class SettingsService extends ChangeNotifier {
   bool _lookaheadIntersections = true;
   bool _trafficCalmingAlerts = true; // Recommended default: true
   bool _speedCameraAlerts = true; // Recommended default: true
+  bool _lookaheadPedestrianCrossings = true; // Recommended default: true
 
   bool get useDynamicPhrases => _useDynamicPhrases;
   VoiceAlertStyle get voiceAlertStyle => _voiceAlertStyle;
@@ -125,6 +127,7 @@ class SettingsService extends ChangeNotifier {
   bool get lookaheadIntersections => _lookaheadIntersections;
   bool get trafficCalmingAlerts => _trafficCalmingAlerts;
   bool get speedCameraAlerts => _speedCameraAlerts;
+  bool get lookaheadPedestrianCrossings => _lookaheadPedestrianCrossings;
   String? get ttsEngine => _ttsEngine;
   String? get ttsVoiceName => _ttsVoiceName;
   String? get ttsVoiceLocale => _ttsVoiceLocale;
@@ -185,6 +188,7 @@ class SettingsService extends ChangeNotifier {
     _lookaheadIntersections = prefs.getBool(_keyLookaheadIntersections) ?? true;
     _trafficCalmingAlerts = prefs.getBool(_keyTrafficCalmingAlerts) ?? true;
     _speedCameraAlerts = prefs.getBool(_keySpeedCameraAlerts) ?? true;
+    _lookaheadPedestrianCrossings = prefs.getBool(_keyLookaheadPedestrianCrossings) ?? true;
     _ttsEngine = prefs.getString(_keyTtsEngine);
     _ttsVoiceName = prefs.getString(_keyTtsVoiceName);
     _ttsVoiceLocale = prefs.getString(_keyTtsVoiceLocale);
@@ -459,6 +463,13 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLookaheadPedestrianCrossings(bool value) async {
+    _lookaheadPedestrianCrossings = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyLookaheadPedestrianCrossings, value);
+    notifyListeners();
+  }
+
   /// Exports all current user settings as a Map
   Map<String, dynamic> exportSettings() {
     return {
@@ -494,6 +505,7 @@ class SettingsService extends ChangeNotifier {
       _keyLookaheadIntersections: _lookaheadIntersections,
       _keyTrafficCalmingAlerts: _trafficCalmingAlerts,
       _keySpeedCameraAlerts: _speedCameraAlerts,
+      _keyLookaheadPedestrianCrossings: _lookaheadPedestrianCrossings,
       _keyTtsEngine: _ttsEngine,
       _keyTtsVoiceName: _ttsVoiceName,
       _keyTtsVoiceLocale: _ttsVoiceLocale,
@@ -649,6 +661,10 @@ class SettingsService extends ChangeNotifier {
       if (map.containsKey(_keySpeedCameraAlerts)) {
         _speedCameraAlerts = map[_keySpeedCameraAlerts] == true;
         await prefs.setBool(_keySpeedCameraAlerts, _speedCameraAlerts);
+      }
+      if (map.containsKey(_keyLookaheadPedestrianCrossings)) {
+        _lookaheadPedestrianCrossings = map[_keyLookaheadPedestrianCrossings] == true;
+        await prefs.setBool(_keyLookaheadPedestrianCrossings, _lookaheadPedestrianCrossings);
       }
       if (map.containsKey(_keyTtsEngine)) {
         _ttsEngine = map[_keyTtsEngine] as String?;

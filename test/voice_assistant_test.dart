@@ -2346,4 +2346,292 @@ void main() {
       expect(sm.currentStreetName, equals('Kuldīgas iela'));
     });
   });
+
+  group('Mid-Block Crossings, Traffic Calming & Lookahead Improvements Tests', () {
+    late VoiceAssistantStateMachine stateMachine;
+
+    setUp(() {
+      stateMachine = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+      );
+    });
+
+    test('Mid-block pedestrian crossing triggers concise alert when enabled', () {
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final events = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t1,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.pedestrianCrossing,
+              distanceMeters: 45.0,
+              latitude: 57.3953,
+              longitude: 21.5653,
+            ),
+          ],
+        ),
+        lookaheadPedestrianCrossings: true,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.pedestrianCrossingAhead));
+      expect(events.first.spokenText, equals('Priekšā gājēju pāreja.'));
+    });
+
+    test('Mid-block pedestrian crossing triggers detailed alert when detailed style is configured', () {
+      final detailedSm = VoiceAssistantStateMachine(
+        initialMaxSpeed: 50,
+        initialIsOneWay: false,
+        initialStreetName: 'Lielais prospekts',
+        alertStyle: VoiceAlertStyle.detailed,
+      );
+
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final events = detailedSm.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t1,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.pedestrianCrossing,
+              distanceMeters: 45.0,
+              latitude: 57.3953,
+              longitude: 21.5653,
+            ),
+          ],
+        ),
+        lookaheadPedestrianCrossings: true,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.pedestrianCrossingAhead));
+      expect(events.first.spokenText, equals('Uzmanību, priekšā gājēju pāreja.'));
+    });
+
+    test('Mid-block pedestrian crossing is suppressed when lookaheadPedestrianCrossings is false', () {
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final events = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t1,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.pedestrianCrossing,
+              distanceMeters: 45.0,
+              latitude: 57.3953,
+              longitude: 21.5653,
+            ),
+          ],
+        ),
+        lookaheadPedestrianCrossings: false,
+      );
+
+      expect(events, isEmpty);
+    });
+
+    test('Mid-block pedestrian crossing is debounced within 25 seconds', () {
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final e1 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t1,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.pedestrianCrossing,
+              distanceMeters: 45.0,
+              latitude: 57.3953,
+              longitude: 21.5653,
+            ),
+          ],
+        ),
+        lookaheadPedestrianCrossings: true,
+      );
+      expect(e1.length, equals(1));
+
+      // 10 seconds later, crossing ahead again -> debounced
+      final t2 = t1.add(const Duration(seconds: 10));
+      final e2 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.396,
+          longitude: 21.566,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t2,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.pedestrianCrossing,
+              distanceMeters: 40.0,
+              latitude: 57.3963,
+              longitude: 21.5663,
+            ),
+          ],
+        ),
+        lookaheadPedestrianCrossings: true,
+      );
+      expect(e2, isEmpty);
+
+      // 30 seconds later -> alert fires again
+      final t3 = t1.add(const Duration(seconds: 30));
+      final e3 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.400,
+          longitude: 21.570,
+          vehicleSpeedKmh: 45.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t3,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.pedestrianCrossing,
+              distanceMeters: 40.0,
+              latitude: 57.4003,
+              longitude: 21.5703,
+            ),
+          ],
+        ),
+        lookaheadPedestrianCrossings: true,
+      );
+      expect(e3.length, equals(1));
+      expect(e3.first.type, equals(VoiceAlertType.pedestrianCrossingAhead));
+    });
+
+    test('Spurious 20 km/h lookahead warning is suppressed while driving on 50 km/h road', () {
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final events = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 48.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t1,
+          lookaheadMaxSpeed: 20, // Raycast accidentally hit a driveway
+          lookaheadDistanceMeters: 70.0,
+        ),
+        lookaheadAlertsEnabled: true,
+      );
+
+      // Must be suppressed because effectiveSpeed is 50, vehicle is not in living zone and not entering one
+      expect(events, isEmpty);
+    });
+
+    test('Legitimate 30 km/h lookahead reduction is announced and debounced for 20 seconds', () {
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final e1 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 48.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t1,
+          lookaheadMaxSpeed: 30,
+          lookaheadDistanceMeters: 70.0,
+        ),
+        lookaheadAlertsEnabled: true,
+      );
+
+      expect(e1.length, equals(1));
+      expect(e1.first.type, equals(VoiceAlertType.lookaheadSpeedReduced));
+      expect(e1.first.spokenText, equals('Pēc 70 metriem ātruma ierobežojums 30 kilometri stundā.'));
+
+      // 5 seconds later, rapid lookahead fluctuation back to 30 -> debounced by 20s window
+      final t2 = t1.add(const Duration(seconds: 5));
+      final e2 = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.396,
+          longitude: 21.566,
+          vehicleSpeedKmh: 48.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Lielais prospekts',
+          timestamp: t2,
+          lookaheadMaxSpeed: 30,
+          lookaheadDistanceMeters: 65.0,
+        ),
+        lookaheadAlertsEnabled: true,
+      );
+      expect(e2, isEmpty);
+    });
+
+    test('Traffic calming lookahead event announces speed bump alert', () {
+      final t1 = DateTime(2026, 10, 1, 10, 0, 0);
+      final events = stateMachine.processRoadPoint(
+        RoadPoint(
+          latitude: 57.395,
+          longitude: 21.565,
+          vehicleSpeedKmh: 40.0,
+          maxSpeedLimitKmh: 50,
+          isOneWay: false,
+          streetName: 'Saules iela',
+          timestamp: t1,
+          lookaheadEvents: [
+            const LookaheadEvent(
+              type: LookaheadEventType.trafficCalming,
+              distanceMeters: 45.0,
+              latitude: 57.3953,
+              longitude: 21.5653,
+            ),
+          ],
+        ),
+        trafficCalmingAlertsEnabled: true,
+      );
+
+      expect(events.length, equals(1));
+      expect(events.first.type, equals(VoiceAlertType.trafficCalmingAhead));
+      expect(events.first.spokenText, equals('Uzmanību, priekšā ātrumvalnis.'));
+    });
+
+    test('VentspilsTrafficNodes finds mid-block pedestrian crossings and speed bumps accurately', () {
+      // Near Kuldīgas / Saules iela speed bump node 84 (57.380704, 21.568767)
+      final calming = VentspilsTrafficNodes.findUpcomingNodes(
+        lat: 57.38045,
+        lon: 21.568767,
+        heading: 0.0, // Heading North
+        lookaheadDist: 60.0,
+        includeTrafficCalming: true,
+        includePedestrianCrossings: false,
+      );
+      expect(calming.any((n) => n.type == LookaheadEventType.trafficCalming), isTrue);
+
+      // Near Lielais prospekts mid-block pedestrian crossing node 103 (57.389660, 21.550446)
+      final crossings = VentspilsTrafficNodes.findUpcomingNodes(
+        lat: 57.38940,
+        lon: 21.550446,
+        heading: 0.0,
+        lookaheadDist: 60.0,
+        includeTrafficCalming: false,
+        includePedestrianCrossings: true,
+      );
+      expect(crossings.any((n) => n.type == LookaheadEventType.pedestrianCrossing), isTrue);
+    });
+  });
 }

@@ -575,6 +575,7 @@ class PMTilesService {
     required double heading,
     required double speedKmh,
     double? customLookaheadDistance,
+    String? currentRoadName,
   }) async {
     final dist = customLookaheadDistance ?? calculateDynamicLookaheadDistance(speedKmh);
     if (dist <= 0) return null;
@@ -585,8 +586,9 @@ class PMTilesService {
       projected.lon,
       vehicleHeading: heading,
       vehicleSpeedKmh: speedKmh,
+      currentRoadName: currentRoadName,
       maxRadiusMeters: 30.0,
-      courtyardRadiusMeters: 15.0,
+      courtyardRadiusMeters: (currentRoadName != null && currentRoadName.trim().isNotEmpty) ? 0.0 : 15.0,
     );
   }
 
