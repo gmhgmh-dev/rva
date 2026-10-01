@@ -338,16 +338,16 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setRoadSearchRadiusMeters(double value) async {
-    _roadSearchRadiusMeters = value;
+    _roadSearchRadiusMeters = value.clamp(10.0, 150.0);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyRoadSearchRadiusMeters, value);
+    await prefs.setDouble(_keyRoadSearchRadiusMeters, _roadSearchRadiusMeters);
     notifyListeners();
   }
 
   Future<void> setCourtyardSearchRadiusMeters(double value) async {
-    _courtyardSearchRadiusMeters = value;
+    _courtyardSearchRadiusMeters = value.clamp(5.0, 40.0);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyCourtyardSearchRadiusMeters, value);
+    await prefs.setDouble(_keyCourtyardSearchRadiusMeters, _courtyardSearchRadiusMeters);
     notifyListeners();
   }
 
@@ -359,9 +359,9 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setStreetChangeConfirmations(int value) async {
-    _streetChangeConfirmations = value;
+    _streetChangeConfirmations = value.clamp(1, 10);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyStreetChangeConfirmations, value);
+    await prefs.setInt(_keyStreetChangeConfirmations, _streetChangeConfirmations);
     notifyListeners();
   }
 
@@ -373,16 +373,16 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setSpeedRestorationConfirmations(int value) async {
-    _speedRestorationConfirmations = value;
+    _speedRestorationConfirmations = value.clamp(1, 10);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keySpeedRestorationConfirmations, value);
+    await prefs.setInt(_keySpeedRestorationConfirmations, _speedRestorationConfirmations);
     notifyListeners();
   }
 
   Future<void> setOneWayExitConfirmations(int value) async {
-    _oneWayExitConfirmations = value;
+    _oneWayExitConfirmations = value.clamp(1, 10);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyOneWayExitConfirmations, value);
+    await prefs.setInt(_keyOneWayExitConfirmations, _oneWayExitConfirmations);
     notifyListeners();
   }
 
@@ -394,9 +394,9 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setStaleGpsTimeoutSeconds(int value) async {
-    _staleGpsTimeoutSeconds = value;
+    _staleGpsTimeoutSeconds = value.clamp(1, 30);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyStaleGpsTimeoutSeconds, value);
+    await prefs.setInt(_keyStaleGpsTimeoutSeconds, _staleGpsTimeoutSeconds);
     notifyListeners();
   }
 
@@ -422,9 +422,9 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setLookaheadDistanceMeters(double value) async {
-    _lookaheadDistanceMeters = value;
+    _lookaheadDistanceMeters = value.clamp(30.0, 150.0);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyLookaheadDistanceMeters, value);
+    await prefs.setDouble(_keyLookaheadDistanceMeters, _lookaheadDistanceMeters);
     notifyListeners();
   }
 
